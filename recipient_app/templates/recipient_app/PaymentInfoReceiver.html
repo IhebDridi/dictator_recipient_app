@@ -1,0 +1,21 @@
+{% extends "global/Page.html" %}
+{% block title %}Your bonus information{% endblock %}
+{% block content %}
+<p>Part {{ payoff_part }} was randomly selected for payment.</p>
+{% if rows %}
+<table class="table">
+  <thead>
+    <tr><th>Round</th><th>Allocated (ECoins)</th><th>Kept by allocator</th></tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr><td>{{ r.round }}</td><td>{{ r.allocated }}</td><td>{{ r.kept }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p>Total allocated to you: {{ total_allocated }} ECoins</p>
+<p>Bonus: {{ bonus_cents }} cents</p>
+{% else %}
+<p>No records assigned yet.</p>
+{% endif %}
+{% endblock %}
