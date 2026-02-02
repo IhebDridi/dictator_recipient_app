@@ -1,4 +1,31 @@
 from os import environ
+import os
+import dj_database_url
+from dotenv import load_dotenv
+load_dotenv()
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True,
+        )
+    }
+else:
+    # fallback: local Postgres (or SQLite if you prefer)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'otree_local',
+            'USER': 'postgres',
+            'PASSWORD': '',
+            'HOST': '127.0.0.1',
+            'PORT': '5432',
+        }
+    }
 
 SESSION_CONFIGS = [
     dict(
@@ -45,6 +72,6 @@ SECRET_KEY = '6887772134834'
 
 INSTALLED_APPS = [
     'otree',
-    'shareddb',
+    
     'recipient_app',
 ]

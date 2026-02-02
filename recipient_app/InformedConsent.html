@@ -1,0 +1,289 @@
+{% extends "global/Page.html" %}
+
+{% block content %}
+
+<div class="header-wrapper">
+    <img src="{% static 'logo_claim_rgb.png' %}" alt="Logo" class="top-logo">
+    <h1 class="main-title">Informed Consent</h1>
+</div>
+    <div class="content-section">
+        <h2>Study Title</h2>
+        <div class="content-box">
+            <p>Delegation of decision-making to AI agents.</p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Purpose of the Study</h2>
+        <div class="content-box">
+            <p>
+                You are invited to participate in a research study exploring how individuals make decisions in resource allocation scenarios. 
+                The study investigates how decision-making is influenced by delegation and the design of agents in a game setting.
+            </p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Participant Requirements and Exclusion Criteria</h2>
+        <div class="content-box">
+            <ul>
+                <li>Be at least 18 years old.</li>
+                <li>Be based in the United States.</li>
+                <li>Have fluent reading and writing skills in English to fully understand the task.</li>
+                <li>Successfully complete all comprehension tests and attention checks during the study.</li>
+                <li>Have reliable internet access.</li>
+                <li>Not having participated in a similar study on this topic previously.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Study Procedure and Tasks</h2>
+        <div class="content-box">
+            <p>If you agree to participate, you will be randomly assigned to one of two roles:</p>
+            <ul>
+                <li><strong>Allocator:</strong> Decide how to allocate monetary bonuses between yourself and other participants (the receivers).</li>
+                <li><strong>Receiver:</strong> Receive allocations made by the allocators over multiple rounds.</li>
+            </ul>
+            <p>You will remain anonymous throughout the study.</p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Duration and Effort</h2>
+        <div class="content-box">
+            <p>The study will take approximately 10 minutes and should be completed in a quiet setting without distractions.</p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Remuneration / Expense Allowance</h2>
+        <div class="content-box">
+            <p>
+                Participants will receive $12 per hour for participating, prorated based on the time taken to complete the study. 
+                Additionally, a monetary bonus of 10 cents per round of play will be given to each pair to be split based on the allocator’s preferences.
+            </p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Voluntariness and Right to Withdraw</h2>
+        <div class="content-box">
+            <p>
+                Participation is entirely voluntary. You may withdraw anytime without any negative consequences.
+            </p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Foreseeable Factors</h2>
+        <div class="content-box">
+            <p>
+                This study does not involve any risks beyond those encountered in everyday life. 
+                However, participants may experience mild discomfort when deciding how to allocate money between themselves and others (if assigned the role of allocator), or when seeing how much was allocated to them (if assigned the role of receiver).
+            </p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Confidentiality and Anonymity</h2>
+        <div class="content-box">
+            <p>
+                All data collected during this study will remain confidential and anonymous, stored securely, and used solely for research purposes.
+            </p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Scope of Data Collection and Handling</h2>
+        <div class="content-box">
+            <p>We will collect the following:</p>
+            <ul>
+                <li>Your decisions in the game.</li>
+                <li>Basic demographic information (e.g., age, gender).</li>
+            </ul>
+            <p>Data will be anonymized and securely stored for up to 5 years. Only authorized researchers will have access to the data. Results may be published, but no information will be traceable to individual participants. Once the study results are published, anonymized data used in publications will be retained indefinitely for transparency and reproducibility purposes.</p>
+        </div>
+    </div>
+
+
+    <div class="content-section">
+        <h2>Right to Data Deletion</h2>
+        <div class="content-box">
+            <p>
+                You may request the deletion of your data at any time. Note that anonymized data already integrated into analyses or publications may not be retrievable.
+            </p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Contact Information</h2>
+        <div class="content-box">
+            <ul>
+                <li><strong>Researcher Name:</strong> Dr. Ines Terrucha</li>
+                <li><strong>Institution:</strong> University of Duisburg-Essen</li>
+                <li><strong>Email:</strong> ines.terrucha@uni-due.de</li>
+                <li><strong>Ethics Oversight Contact:</strong> Ethics Committee of the German Psychological Society</li>
+                
+            </ul>
+        </div>
+    </div>
+
+        <div class="content-section">
+                    <h2>A note on deception:</h2>
+
+            <div class="content-box">
+            <p>There is <strong>NO DECEPTION</strong> in this economic experiment. You will be interacting with other real human participants, and depending on your role in the game, your decisions will affect the monetary gains of both you and the other participants you will be paired with.</p>    
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Consent</h2>
+        <div class="content-box">
+            <p>
+            </p>
+            By providing your Prolific ID in the box below and clicking “I agree”, you confirm that:
+            <ol>
+                <li>You have read and understood the information provided.</li>
+                <li>You meet the participation requirements.</li>
+                <li>You voluntarily agree to participate in this study.</li>
+            </ol>
+        </div>
+    </div>
+
+        <p id="error-msg" style="color: red; display: none;"></p>
+
+        <!-- Use an ID for the form and bind JS separately -->
+        <form method="post" id="consent-form">
+        <label for="prolific-id"><strong>My Prolific ID is:</strong></label><br>
+            {{ form.prolific_id }}
+            <br><br>
+            <button type="submit" class="modern-btn" id="agree-btn">I agree</button>
+        </form>
+        </form>
+</div>
+
+<script>
+  
+        form.addEventListener('submit', function (event) {
+            // Always prevent default first
+            console.log('Checking ID')
+            const form = document.getElementById('consent-form');
+            const input = document.querySelector('input[name="prolific_id"]');
+            const error = document.getElementById("error-msg");
+
+
+            const val = input.value.trim();
+            const isValid = /^[A-Za-z0-9]{24}$/.test(val);
+
+            if (!isValid) {
+                event.preventDefault(); 
+                console.log('ID not valid')
+                error.style.display = "block";
+                error.textContent = "Please make sure that your Prolific ID is correct. You will not be able to proceed in the experiment without providing your Prolific ID.";
+            } else {
+                error.style.display = "none";
+                console.log('ID is valid')
+
+                // ✅ Submit manually if valid
+                form.submit();
+            }
+        });
+</script>
+
+<style>
+/* General Styling */
+body {
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f9f9f9;
+    color: #333;
+}
+
+.modern-consent-container {
+    max-width: 900px;
+    margin: 30px auto;
+    background: #ffffff;
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+/* Main Title Styling */
+.main-title {
+    text-align: center;
+    font-size: 30px;
+    margin-bottom: 20px;
+    color: #333333; /* Blackish color */
+    font-weight: bold;
+    border-bottom: 3px solid #0056b3; /* Adds a green underline */
+    padding-bottom: 10px;
+}
+
+/* Section Styling */
+.content-section {
+    margin-bottom: 20px;
+}
+
+.content-section h2 {
+    font-size: 22px;
+    color: #0056b3;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+/* Content Box Styling */
+.content-box {
+    background: #f7f9fa;
+    padding: 15px 20px;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    line-height: 1.6;
+}
+
+/* Button Styling */
+.modern-btn {
+    display: block;
+    width: 100%;
+    max-width: 200px;
+    margin: 20px auto;
+    padding: 12px 20px;
+    font-size: 18px;
+    color: #ffffff;
+    background-color: #0056b3;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    text-align: center;
+}
+
+
+.header-wrapper {
+    position: relative;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.top-logo {
+    position: absolute;
+    top: 0;
+    right: 0;
+    max-height: 60px;
+    margin: 10px;
+}
+
+.main-title {
+    font-size: 30px;
+    font-weight: bold;
+    color: #333333;
+    border-bottom: 3px solid #0056b3;
+    padding-bottom: 10px;
+    display: inline-block;
+}
+.modern-btn:hover {
+    background-color: #003d80;
+}
+</style>
+{% endblock %}

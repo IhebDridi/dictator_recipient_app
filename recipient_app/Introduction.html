@@ -1,0 +1,198 @@
+{% extends "global/Page.html" %}
+
+{% block content %}
+<div class="modern-container">
+    <h1 class="main-title">Welcome to this Experiment</h1>
+        <p class="intro-text">
+        Please read the following instructions carefully. After 20 seconds, a “Continue” button will appear, allowing you to proceed to the next step.
+        </p>
+    <div class="content-section">
+        <h2>Your Role: {{ role }}</h2>
+        <div class="content-box">
+            <p>
+                You have been assigned the role of <strong>Allocator</strong> in this study. As an Allocator, your task is to decide how to allocate monetary bonuses between yourself and other participants (called Receivers).
+            </p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>How Your Task is Structured</h2>
+        <div class="content-box">
+            <p>Your task is divided into <strong>three parts</strong>, and in each part, you will play <strong>10 rounds</strong>.</p>
+            <ul>
+                <li>In each round, you will decide how to allocate <strong>100 ECoins</strong> between yourself and a Receiver.</li>
+                <li>Before each part, you will receive specific instructions about how to make your decisions.</li>
+                <li>At the end of the experiment, <strong>one of the three parts will be randomly selected</strong> to determine your actual bonus payment in dollars.</li>
+                <li>You will not know which part is selected until the study is complete, so please consider your decisions carefully in every part.</li>
+                <li>The bonus payment will be transferred to you, within a week after you participate in the study, at a rate of 10 ECoins = 1 cent.</li>
+                    
+            </ul>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Details About Each Part</h2>
+        <div class="content-box">
+            <ol>
+                <li><strong>Part 1:</strong> You will set up an AI agent at the beginning of the part, and the AI will make all allocation decisions on your behalf for the 10 rounds.</li>
+                <li><strong>Part 2:</strong> You will make every decision yourself in each of the 10 rounds.</li>
+                <li><strong>Part 3:</strong> You will have the option to either make each decision yourself or delegate the decisions to an AI agent.</li>
+            </ol>
+            <p>Specific instructions will be provided before the start of each part to guide you through the process.</p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>How Each Round Works</h2>
+        <div class="content-box">
+            <ul>
+                <li>You will receive a total of <strong>100 ECoins</strong> for each round.</li>
+                <li>In parts where you make the decisions, you will choose how much of the 100 ECoins you want to allocate to each Receiver you encounter in every round.</li>
+                <li>In parts where an AI agent makes decisions, the agent (set up by you) will determine how to allocate the bonus in each round according to your preferences.</li>
+                <li><strong>Each round is a one-on-one interaction between you (the Allocator) and another human participant (the Receiver).</strong></li>
+                <li><strong>Each round is independent: it always starts with 100 fresh ECoins to allocate, and previous rounds do not influence future ones.</strong></li>
+                <li><strong>Receivers are reshuffled between rounds.</strong> This means that in each round, you will be matched with a different Receiver, ensuring that every decision you make is independent of your interactions in previous rounds.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Important Details</h2>
+        <div class="content-box">
+            <ul>
+                <li>The Receivers are other human participants who depend on your decisions to determine their bonuses.</li>
+                <li>The decisions you make (or delegate to the AI) are entirely up to you. There are no right or wrong answers.</li>
+                <li>Only one randomly selected part will be used to determine your bonus payment in dollars, but your decisions in all parts will contribute to the study.
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Anonymity</h2>
+        <div class="content-box">
+            <p>
+                Your decisions will remain anonymous throughout the study. The Receivers will not know your identity, and you will not know theirs.
+            </p>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <h2>Important: Next Steps</h2>
+        <div class="content-box">
+            <p>
+                After clicking <strong>“Continue”</strong>, you will be redirected to a <strong>Comprehension Test</strong>.
+                This test is designed to assess how well you understood the task, so please read the instructions carefully before proceeding. If you fail the test more than <strong>three times</strong>, you will be excluded from the experiment. 
+                For your convenience, the instructions will also appear again at the bottom of the Comprehension Test page. 
+            </p>
+        </div>
+    </div>
+
+    <form method="post" class="form-container">
+        <button type="submit" class="modern-btn" id="delayedForm" hidden>Continue</button>
+    </form>
+</div>
+<script>
+    // Wait until the DOM is ready
+    document.addEventListener('DOMContentLoaded', () => {
+      // Reveal the form after 90 000 ms = 90 s
+      setTimeout(() => {
+        document.getElementById('delayedForm').hidden = false;
+      }, 20000);
+    });
+  </script>
+<style>
+/* General Styling */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #f9f9f9;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+
+/* Container Styling */
+.modern-container {
+    max-width: 900px;
+    margin: 30px auto;
+    background: #ffffff;
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+/* Title Styling */
+.main-title {
+    font-size: 30px;
+    color: #333333; /* Blackish color */
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 3px solid #0056b3; /* Contrast border */
+    padding-bottom: 10px;
+}
+
+/* Section Styling */
+.content-section {
+    margin-bottom: 20px;
+}
+.intro-text {
+    font-size: 16px;
+    color: #9c0909;
+    margin-bottom: 30px;
+    line-height: 1.6;
+}
+
+.content-section h2 {
+    font-size: 22px;
+    color: #0056b3;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+/* Content Box Styling */
+.content-box {
+    background: #f7f9fa;
+    padding: 15px 20px;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    line-height: 1.6;
+}
+
+/* Button Styling */
+.modern-btn {
+    display: block;
+    width: 100%;
+    max-width: 200px;
+    margin: 20px auto;
+    padding: 12px 20px;
+    font-size: 18px;
+    color: #ffffff;
+    background-color: #0056b3;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    text-align:
+    center;
+}
+
+.modern-btn:hover {
+    background-color: #003d80;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .modern-container {
+        padding: 15px;
+    }
+
+    .main-title {
+        font-size: 26px;
+    }
+
+    .content-section h2 {
+        font-size: 20px;
+    }
+}
+</style>
+{% endblock %}
