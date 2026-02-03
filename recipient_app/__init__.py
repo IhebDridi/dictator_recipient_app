@@ -3,7 +3,6 @@ import django
 from django.conf import settings
 
 # Temporary safety net to ensure Django settings are loaded
-# (used only during local development / debugging)
 if not settings.configured:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings")
     django.setup()
@@ -59,8 +58,24 @@ class InformedConsent(Page):
 
     def before_next_page(self, timeout_happened=False):
         pid = self.prolific_id.strip()
-        self.participant.label = pid
-        assign_allocations_if_needed(pid)
+        self.participant.label = pid  # display only
+
+        # ✅ STEP 1: check if this Prolific ID already has allocations
+        already_assigned = recipient_has_allocations(pid)
+
+        self.participant.vars['already_assigned'] = already_assigned
+
+        # ✅ If YES → do nothing else, results must be shown later
+        if already_assigned:
+            self.participant.vars['exhausted'] = False
+            return
+
+        # ✅ STEP 2: this is a NEW Prolific ID → try to assign
+        success = assign_allocations_if_needed(pid, x=80)
+
+        # ✅ STEP 3: mark exhaustion only for NEW IDs
+        self.participant.vars['exhausted'] = (success is False)
+
 
 
 # --------------------------------------------------
@@ -120,46 +135,44 @@ class Results(Page):
         return self.round_number == 1
 
     def vars_for_template(self):
-        recipient_pid = self.participant.label
-        assign_allocations_if_needed(recipient_pid)
+        recipient_key = self.participant.label
 
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT
-                        round_number,
-                        allocated_value,
-                        part,
-                        dictator_prolific_id
-                    FROM recipient_allocations
-                    WHERE recipient_prolific_id = %s
-                    ORDER BY round_number
-                    """,
-                    [recipient_pid]
-                )
-                rows_raw = cursor.fetchall()
-        finally:
-            connection.close()
+        already_assigned = self.participant.vars.get('already_assigned', False)
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    round_number,
+                    allocated_value,
+                    dictator_prolific_id
+                FROM recipient_allocations
+                WHERE recipient_prolific_id = %s
+                ORDER BY round_number
+                """,
+                [recipient_key]
+            )
+            rows_raw = cursor.fetchall()
 
         if not rows_raw:
             raise RuntimeError("No recipient allocations found.")
 
-        allocator_pid = rows_raw[0][3]
-        chosen_part = rows_raw[0][2]
-
         rows = [
-            {"round": r, "received": allocated, "allocated": 100 - allocated}
-            for r, allocated, _, _ in rows_raw
+            {
+                "dictator_round": dictator_round,
+                "received": received,
+                "allocated": 100 - received,
+                "dictator_id": dictator_pid,   # ✅ now defined
+            }
+            for dictator_round, received, dictator_pid in rows_raw
         ]
-
-        total_received = sum(r["received"] for r in rows)
-
         return {
-            "allocator_pid": allocator_pid,
-            "chosen_part": chosen_part,
             "rows": rows,
-            "total_received": total_received,
+            "total_received": sum(r["received"] for r in rows),
+            "n_rounds": len(rows),
+            "n_dictators": len({pid for _, _, pid in rows_raw}),
+            "already_assigned": already_assigned,
+            "recipient_prolific_id": self.participant.label,  # ✅ NEW
         }
 
 
@@ -172,45 +185,35 @@ class Debriefing(Page):
         return self.round_number == 1
 
     def vars_for_template(self):
-        recipient_pid = self.participant.label
+        recipient_key = self.participant.label  # 🔧 FIX (was label)
 
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT
-                        round_number,
-                        allocated_value,
-                        part,
-                        dictator_prolific_id
-                    FROM recipient_allocations
-                    WHERE recipient_prolific_id = %s
-                    ORDER BY round_number
-                    """,
-                    [recipient_pid]
-                )
-                rows_raw = cursor.fetchall()
-        finally:
-            connection.close()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    round_number,
+                    allocated_value,
+                    part,
+                    dictator_prolific_id
+                FROM recipient_allocations
+                WHERE recipient_prolific_id = %s
+                ORDER BY round_number
+                """,
+                [recipient_key]
+            )
+            rows_raw = cursor.fetchall()
 
         if not rows_raw:
             raise RuntimeError("Debriefing: no recipient_allocations found.")
-
-        allocator_pid = rows_raw[0][3]
-        chosen_part = rows_raw[0][2]
 
         rows = [
             {"round": r, "allocated": 100 - received, "received": received}
             for r, received, _, _ in rows_raw
         ]
 
-        total_received = sum(r["received"] for r in rows)
-
         return {
-            "allocator_pid": allocator_pid,
-            "chosen_part": chosen_part,
             "rows": rows,
-            "total_received": total_received,
+            "total_received": sum(r["received"] for r in rows),
         }
 
 
@@ -221,6 +224,9 @@ class ThankYou(Page):
     def is_displayed(self):
         return self.round_number == 1
 
+class Exhausted(Page):
+    def is_displayed(self):
+        return self.participant.vars.get('exhausted', False)
 
 # --------------------------------------------------
 # PAGE SEQUENCE
@@ -230,6 +236,7 @@ page_sequence = [
     Instructions,
     ComprehensionTest,
     FailedTest,
+    Exhausted,
     Results,
     Debriefing,
     ThankYou,
@@ -239,89 +246,89 @@ page_sequence = [
 # --------------------------------------------------
 # ALLOCATION ASSIGNMENT (SAFE)
 # --------------------------------------------------
-def assign_allocations_if_needed(recipient_prolific_id):
-    try:
-        with connection.cursor() as cursor:
-            # 1: Check whether the recipient was already assigned
-            cursor.execute(
-                """
-                SELECT 1
-                FROM recipient_allocations
-                WHERE recipient_prolific_id = %s
-                LIMIT 1
-                """,
-                [recipient_prolific_id]
-            )
-            if cursor.fetchone():
-                return
-            # 2: Randomly select one valid dictator–part pair
-            cursor.execute(
-                """
-                SELECT prolific_id, part
-                FROM (
-                    SELECT
-                        prolific_id,
-                        CASE
-                            WHEN round_number BETWEEN 1 AND 10 THEN 1
-                            WHEN round_number BETWEEN 11 AND 20 THEN 2
-                            WHEN round_number BETWEEN 21 AND 30 THEN 3
-                        END AS part
-                    FROM dictator_game_player
-                    WHERE allocation IS NOT NULL
-                      AND prolific_id IS NOT NULL
-                ) AS allocator_parts
-                WHERE part IS NOT NULL
-                GROUP BY prolific_id, part
-                ORDER BY RANDOM()
-                LIMIT 1
-                """
-            )
-            row = cursor.fetchone()
-            if not row:
-                raise RuntimeError("No valid allocator/part combination available.")
-            # 3: Determine which rounds belong to the chosen part
-            allocator_pid, chosen_part = row
-            round_start = (chosen_part - 1) * 10 + 1
-            round_end = chosen_part * 10
-            # 4: Copy dictator decisions into recipient table
-            cursor.execute(
-                """
-                INSERT INTO recipient_allocations
-                (recipient_prolific_id,
-                 dictator_prolific_id,
-                 round_number,
-                 part,
-                 allocated_value)
-                SELECT
-                    %s,
-                    prolific_id,
-                    round_number,
-                    %s,
-                    100 - allocation
-                FROM dictator_game_player
-                WHERE prolific_id = %s
-                  AND allocation IS NOT NULL
-                  AND allocation BETWEEN 0 AND 100
-                  AND round_number BETWEEN %s AND %s
-                ORDER BY round_number
-                """,
-                [
+def assign_allocations_if_needed(recipient_prolific_id, x=80):
+
+    with connection.cursor() as cursor:
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM recipient_allocations
+            WHERE recipient_prolific_id = %s
+            LIMIT 1
+            """,
+            [recipient_prolific_id]
+        )
+        if cursor.fetchone():
+            return
+
+        cursor.execute(
+            """
+            SELECT
+                d.prolific_id,
+                d.round_number,
+                CASE
+                    WHEN d.round_number BETWEEN 1 AND 10 THEN 1
+                    WHEN d.round_number BETWEEN 11 AND 20 THEN 2
+                    WHEN d.round_number BETWEEN 21 AND 30 THEN 3
+                END AS part,
+                d.allocation
+            FROM dictator_game_player d
+            WHERE d.allocation IS NOT NULL
+              AND d.prolific_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM recipient_allocations r
+                  WHERE r.dictator_prolific_id = d.prolific_id
+                    AND r.round_number = d.round_number
+              )
+            ORDER BY RANDOM()
+            LIMIT %s
+            """,
+            [x]
+        )
+
+        rows = cursor.fetchall()
+
+        if not rows:
+            return False
+
+        cursor.executemany(
+            """
+            INSERT INTO recipient_allocations
+            (recipient_prolific_id,
+             dictator_prolific_id,
+             round_number,
+             part,
+             allocated_value)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            [
+                (
                     recipient_prolific_id,
-                    chosen_part,
-                    allocator_pid,
-                    round_start,
-                    round_end,
-                ]
-            )
-            # 5: Validate successful insertion
-            if cursor.rowcount == 0:
-                raise RuntimeError(
-                    f"Allocator {allocator_pid} has no rounds in part {chosen_part}."
+                    pid,
+                    rnd,
+                    part,
+                    100 - allocation
                 )
+                for pid, rnd, part, allocation in rows
+            ]
+        )
+        return True
 
-    finally:
-        connection.close()
 
+def recipient_has_allocations(recipient_prolific_id):
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM recipient_allocations
+            WHERE recipient_prolific_id = %s
+            LIMIT 1
+            """,
+            [recipient_prolific_id]
+        )
+        return cursor.fetchone() is not None
 # ==================================================
 # ASSIGN-ON-FIRST-LOGIN LOGIC
 # ==================================================

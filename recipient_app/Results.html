@@ -2,73 +2,62 @@
 
 {% block content %}
 <div class="modern-container">
+
     <h1 class="main-title">Your Results</h1>
 
+    {% if already_assigned %}
+        <p class="summary-note" style="color:#b00020;">
+            <strong>Note:</strong>
+            You have already received an allocation earlier.
+            The results shown below are the same as before.
+        </p>
+    {% endif %}
     <p class="summary-note">
-        Your bonus is based on decisions made by one randomly selected allocator.
+    <strong>Your Prolific ID:</strong> {{ recipient_prolific_id }}
     </p>
 
     <p class="summary-note">
-        <strong>Selected part:</strong> Part {{ chosen_part }}
+        You have received <strong>{{ n_rounds }}</strong> rounds from
+        <strong>{{ n_dictators }}</strong> different allocators.
     </p>
 
-    <div class="tables-container">
-        <div class="table-wrapper">
-            <div class="table-header">
-                <h4 class="table-title">
-                    Allocation outcomes
-                </h4>
-            </div>
+    <table class="styled-table">
+        <thead>
+            <tr>
+                <th>round</th>
+                <th>Allocator kept</th>
+                <th>You received</th>
+                <th>Dictator ID (debug)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ r.allocated }}</td>
+                    <td>{{ r.received }}</td>
+                    <td>{{ r.dictator_id }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
-            <table class="styled-table">
-                <thead>
-                    <tr>
-                        <th>Round</th>
-                        <th>Allocator kept</th>
-                        <th>You received</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for r in rows %}
-                    <tr>
-                        <td>{{ r.round }}</td>
-                        <td>{{ r.allocated }}</td>
-                        <td>{{ r.received }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-
-            <p class="part-total">
-                <strong>Total received so far:</strong>
-                {{ total_received }} ECoins
-            </p>
-        </div>
-    </div>
-
-    <p class="summary-note">
-        Click “Continue” to see a summary of your bonus payment.
+    <p class="part-total">
+        <strong>Total received:</strong> {{ total_received }} ECoins
     </p>
 
     <form method="post">
-        <button type="submit" class="modern-btn" id="continue-btn">
+        <button type="submit" class="modern-btn">
             Continue
         </button>
     </form>
+
 </div>
 
+
 <style>
-/* General Styling */
 #continue-btn {
     margin-top: 30px;
-}
-
-body {
-    font-family: 'Arial', sans-serif;
-    margin: 0;
-    padding: 0;
-    background-color: #f9f9f9;
-    color: #333;
 }
 
 .modern-container {
@@ -80,38 +69,27 @@ body {
     border-radius: 8px;
 }
 
-/* Title Styling */
 .main-title {
     font-size: 30px;
-    color: #333333;
     text-align: center;
     margin-bottom: 20px;
     border-bottom: 3px solid #0056b3;
     padding-bottom: 10px;
 }
 
-/* Tables Container */
 .tables-container {
     display: flex;
     justify-content: center;
-    flex-wrap: wrap;
-    gap: 20px;
     margin-top: 20px;
 }
 
-/* Table Wrapper Styling */
 .table-wrapper {
     background: #f7f9fa;
     padding: 15px 20px;
     border-radius: 6px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    width: auto;
-    min-width: 300px;
-    max-width: 400px;
-    text-align: center;
 }
 
-/* Table Header */
 .table-header {
     margin-bottom: 10px;
 }
@@ -120,42 +98,29 @@ body {
     font-size: 18px;
     color: #0056b3;
     font-weight: bold;
+    text-align: center;
 }
 
-/* Table Styling */
 .styled-table {
     border-collapse: collapse;
     width: 100%;
     font-size: 14px;
-    text-align: center;
 }
 
 .styled-table thead tr {
     background-color: #0056b3;
     color: #ffffff;
-    font-weight: bold;
 }
 
 .styled-table th,
 .styled-table td {
     border: 1px solid #dddddd;
     padding: 8px 10px;
+    text-align: center;
 }
 
 .styled-table tbody tr:nth-of-type(even) {
     background-color: #f3f3f3;
-}
-
-.styled-table tbody tr:hover {
-    background-color: #f1f1f1;
-}
-
-/* Summary Note */
-.summary-note {
-    margin-top: 20px;
-    font-size: 16px;
-    text-align: center;
-    color: #555555;
 }
 
 .part-total {
@@ -165,24 +130,11 @@ body {
     text-align: center;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-    .tables-container {
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .table-wrapper {
-        max-width: 100%;
-    }
-
-    .table-title {
-        font-size: 16px;
-    }
-
-    .styled-table {
-        font-size: 13px;
-    }
+.summary-note {
+    margin-top: 20px;
+    font-size: 16px;
+    text-align: center;
+    color: #555555;
 }
 
 .modern-btn {
@@ -197,7 +149,6 @@ body {
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    transition: background-color 0.3s;
 }
 
 .modern-btn:hover {

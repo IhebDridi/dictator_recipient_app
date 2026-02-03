@@ -1,0 +1,126 @@
+{% extends "global/Page.html" %}
+
+{% block content %}
+<div class="modern-container">
+
+    <h1 class="main-title">Study Completed</h1>
+
+    <p class="summary-note">
+        Thank you for your interest in this study.
+    </p>
+
+    <p class="summary-note">
+        Unfortunately, all available decision rounds have already been assigned
+        to previous participants.
+    </p>
+
+    <p class="summary-note">
+        As a result, no allocation can be made for you.
+    </p>
+
+    <p class="summary-note">
+        You may now close this window and return to Prolific.
+    </p>
+
+</div>
+<style>
+#continue-btn {
+    margin-top: 30px;
+}
+
+.modern-container {
+    max-width: 900px;
+    margin: 30px auto;
+    background: #ffffff;
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+.main-title {
+    font-size: 30px;
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 3px solid #0056b3;
+    padding-bottom: 10px;
+}
+
+.tables-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.table-wrapper {
+    background: #f7f9fa;
+    padding: 15px 20px;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.table-header {
+    margin-bottom: 10px;
+}
+
+.table-title {
+    font-size: 18px;
+    color: #0056b3;
+    font-weight: bold;
+    text-align: center;
+}
+
+.styled-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+}
+
+.styled-table thead tr {
+    background-color: #0056b3;
+    color: #ffffff;
+}
+
+.styled-table th,
+.styled-table td {
+    border: 1px solid #dddddd;
+    padding: 8px 10px;
+    text-align: center;
+}
+
+.styled-table tbody tr:nth-of-type(even) {
+    background-color: #f3f3f3;
+}
+
+.part-total {
+    margin-top: 15px;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.summary-note {
+    margin-top: 20px;
+    font-size: 16px;
+    text-align: center;
+    color: #555555;
+}
+
+.modern-btn {
+    display: block;
+    width: 100%;
+    max-width: 200px;
+    margin: 20px auto;
+    padding: 12px 20px;
+    font-size: 18px;
+    color: #ffffff;
+    background-color: #0056b3;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.modern-btn:hover {
+    background-color: #003d80;
+}
+</style>
+{% endblock %}
