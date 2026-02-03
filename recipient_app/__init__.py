@@ -34,27 +34,24 @@ class Group(BaseGroup):
 # Player model (recipient only)
 # --------------------------------------------------
 class Player(BasePlayer):
-    
-    prolific_id = models.StringField(blank=False,label="Please enter your Prolific ID")
 
-    # ✅ comprehension test fields — must match HTML names
-    q1 = models.StringField(choices=['a','b','c','d'])
-    q2 = models.StringField(choices=['a','b','c','d'])
-    q3 = models.StringField(choices=['a','b','c','d'])
-    q4 = models.StringField(choices=['a','b','c','d'])
-    q5 = models.StringField(choices=['a','b','c','d'])
-    q6 = models.StringField(choices=['a','b','c','d'])
-    q7 = models.StringField(choices=['a','b'])
-    q8 = models.StringField(choices=['a','b'])
+    prolific_id = models.StringField(blank=False, label="Please enter your Prolific ID")
 
-    # ✅ attempt tracking
+    q1 = models.StringField(choices=['a', 'b', 'c', 'd'])
+    q2 = models.StringField(choices=['a', 'b', 'c', 'd'])
+    q3 = models.StringField(choices=['a', 'b', 'c', 'd'])
+    q4 = models.StringField(choices=['a', 'b', 'c', 'd'])
+    q5 = models.StringField(choices=['a', 'b', 'c', 'd'])
+    q6 = models.StringField(choices=['a', 'b', 'c', 'd'])
+    q7 = models.StringField(choices=['a', 'b'])
+    q8 = models.StringField(choices=['a', 'b'])
+
     comprehension_attempts = models.IntegerField(initial=0)
     is_excluded = models.BooleanField(initial=False)
 
 
-
 # --------------------------------------------------
-# INFORMED CONSENT (with Prolific ID input)
+# INFORMED CONSENT
 # --------------------------------------------------
 class InformedConsent(Page):
     form_model = 'player'
@@ -62,11 +59,7 @@ class InformedConsent(Page):
 
     def before_next_page(self, timeout_happened=False):
         pid = self.prolific_id.strip()
-
-        # ✅ THIS IS THE CRITICAL LINE
         self.participant.label = pid
-
-        # Optional but safe: assign here
         assign_allocations_if_needed(pid)
 
 
@@ -83,7 +76,7 @@ class Instructions(Page):
 # --------------------------------------------------
 class ComprehensionTest(Page):
     form_model = 'player'
-    form_fields = ['q1','q2','q3','q4','q5','q6','q7','q8']
+    form_fields = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8']
 
     def is_displayed(self):
         return not self.field_maybe_none('is_excluded')
@@ -104,29 +97,23 @@ class ComprehensionTest(Page):
 
         if wrong:
             self.comprehension_attempts += 1
-
             if self.comprehension_attempts >= 3:
                 self.is_excluded = True
                 return None
-
             return f"You answered these questions incorrectly: {', '.join(wrong)}"
-
-
 
 
 # --------------------------------------------------
 # FAILED TEST
 # --------------------------------------------------
-
 class FailedTest(Page):
     def is_displayed(self):
         return self.field_maybe_none('is_excluded')
 
 
 # --------------------------------------------------
-# RESULTS / PAYMENT INFORMATION
+# RESULTS
 # --------------------------------------------------
-
 class Results(Page):
 
     def is_displayed(self):
@@ -134,39 +121,35 @@ class Results(Page):
 
     def vars_for_template(self):
         recipient_pid = self.participant.label
-
-        # Ensure allocations exist (idempotent)
         assign_allocations_if_needed(recipient_pid)
 
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT
-                    round_number,
-                    allocated_value,
-                    part,
-                    dictator_prolific_id
-                FROM recipient_allocations
-                WHERE recipient_prolific_id = %s
-                ORDER BY round_number
-                """,
-                [recipient_pid]
-            )
-            rows_raw = cursor.fetchall()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        round_number,
+                        allocated_value,
+                        part,
+                        dictator_prolific_id
+                    FROM recipient_allocations
+                    WHERE recipient_prolific_id = %s
+                    ORDER BY round_number
+                    """,
+                    [recipient_pid]
+                )
+                rows_raw = cursor.fetchall()
+        finally:
+            connection.close()
 
         if not rows_raw:
             raise RuntimeError("No recipient allocations found.")
 
-        # All rows have same allocator and part
         allocator_pid = rows_raw[0][3]
         chosen_part = rows_raw[0][2]
 
         rows = [
-            {
-                "round": r,
-                "received": allocated,
-                "allocated": 100 - allocated,
-            }
+            {"round": r, "received": allocated, "allocated": 100 - allocated}
             for r, allocated, _, _ in rows_raw
         ]
 
@@ -178,6 +161,8 @@ class Results(Page):
             "rows": rows,
             "total_received": total_received,
         }
+
+
 # --------------------------------------------------
 # DEBRIEFING
 # --------------------------------------------------
@@ -189,21 +174,24 @@ class Debriefing(Page):
     def vars_for_template(self):
         recipient_pid = self.participant.label
 
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT
-                    round_number,
-                    allocated_value,
-                    part,
-                    dictator_prolific_id
-                FROM recipient_allocations
-                WHERE recipient_prolific_id = %s
-                ORDER BY round_number
-                """,
-                [recipient_pid]
-            )
-            rows_raw = cursor.fetchall()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        round_number,
+                        allocated_value,
+                        part,
+                        dictator_prolific_id
+                    FROM recipient_allocations
+                    WHERE recipient_prolific_id = %s
+                    ORDER BY round_number
+                    """,
+                    [recipient_pid]
+                )
+                rows_raw = cursor.fetchall()
+        finally:
+            connection.close()
 
         if not rows_raw:
             raise RuntimeError("Debriefing: no recipient_allocations found.")
@@ -212,11 +200,7 @@ class Debriefing(Page):
         chosen_part = rows_raw[0][2]
 
         rows = [
-            {
-                "round": r,
-                "allocated": 100 - received,
-                "received": received,
-            }
+            {"round": r, "allocated": 100 - received, "received": received}
             for r, received, _, _ in rows_raw
         ]
 
@@ -228,8 +212,10 @@ class Debriefing(Page):
             "rows": rows,
             "total_received": total_received,
         }
+
+
 # --------------------------------------------------
-# THANK YOU / END PAGE
+# THANK YOU
 # --------------------------------------------------
 class ThankYou(Page):
     def is_displayed(self):
@@ -237,7 +223,7 @@ class ThankYou(Page):
 
 
 # --------------------------------------------------
-# Page order for the recipient flow
+# PAGE SEQUENCE
 # --------------------------------------------------
 page_sequence = [
     InformedConsent,
@@ -249,105 +235,92 @@ page_sequence = [
     ThankYou,
 ]
 
+
+# --------------------------------------------------
+# ALLOCATION ASSIGNMENT (SAFE)
+# --------------------------------------------------
 def assign_allocations_if_needed(recipient_prolific_id):
-    """
-    Assign allocations to a recipient from ONE randomly selected
-    (allocator, part) pair that actually exists in the data.
+    try:
+        with connection.cursor() as cursor:
 
-    No requirement for 10 rounds.
-    Inserts all available rounds for that allocator in that part.
+            cursor.execute(
+                """
+                SELECT 1
+                FROM recipient_allocations
+                WHERE recipient_prolific_id = %s
+                LIMIT 1
+                """,
+                [recipient_prolific_id]
+            )
+            if cursor.fetchone():
+                return
 
-    Idempotent: runs only once per recipient.
-    """
+            cursor.execute(
+                """
+                SELECT prolific_id, part
+                FROM (
+                    SELECT
+                        prolific_id,
+                        CASE
+                            WHEN round_number BETWEEN 1 AND 10 THEN 1
+                            WHEN round_number BETWEEN 11 AND 20 THEN 2
+                            WHEN round_number BETWEEN 21 AND 30 THEN 3
+                        END AS part
+                    FROM dictator_game_player
+                    WHERE allocation IS NOT NULL
+                      AND prolific_id IS NOT NULL
+                ) AS allocator_parts
+                WHERE part IS NOT NULL
+                GROUP BY prolific_id, part
+                ORDER BY RANDOM()
+                LIMIT 1
+                """
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise RuntimeError("No valid allocator/part combination available.")
 
-    with connection.cursor() as cursor:
+            allocator_pid, chosen_part = row
+            round_start = (chosen_part - 1) * 10 + 1
+            round_end = chosen_part * 10
 
-        # --------------------------------------------------
-        # 1) Check if allocations already exist
-        # --------------------------------------------------
-        cursor.execute(
-            """
-            SELECT 1
-            FROM recipient_allocations
-            WHERE recipient_prolific_id = %s
-            LIMIT 1
-            """,
-            [recipient_prolific_id]
-        )
-        if cursor.fetchone():
-            return
-
-        # --------------------------------------------------
-        # 2) Choose ONE valid (allocator, part) pair
-        # --------------------------------------------------
-        cursor.execute(
-            """
-            SELECT prolific_id, part
-            FROM (
+            cursor.execute(
+                """
+                INSERT INTO recipient_allocations
+                (recipient_prolific_id,
+                 dictator_prolific_id,
+                 round_number,
+                 part,
+                 allocated_value)
                 SELECT
+                    %s,
                     prolific_id,
-                    CASE
-                        WHEN round_number BETWEEN 1 AND 10 THEN 1
-                        WHEN round_number BETWEEN 11 AND 20 THEN 2
-                        WHEN round_number BETWEEN 21 AND 30 THEN 3
-                    END AS part
+                    round_number,
+                    %s,
+                    100 - allocation
                 FROM dictator_game_player
-                WHERE allocation IS NOT NULL
-                  AND prolific_id IS NOT NULL
-            ) AS allocator_parts
-            WHERE part IS NOT NULL
-            GROUP BY prolific_id, part
-            ORDER BY RANDOM()
-            LIMIT 1
-            """
-        )
-        row = cursor.fetchone()
-        if not row:
-            raise RuntimeError("No valid allocator/part combination available.")
-
-        allocator_pid, chosen_part = row
-
-        round_start = (chosen_part - 1) * 10 + 1
-        round_end   = chosen_part * 10
-
-        # --------------------------------------------------
-        # 3) Insert ALL rounds for that allocator and part
-        # --------------------------------------------------
-        cursor.execute(
-            """
-            INSERT INTO recipient_allocations
-            (recipient_prolific_id,
-             dictator_prolific_id,
-             round_number,
-             part,
-             allocated_value)
-            SELECT
-                %s,
-                prolific_id,
-                round_number,
-                %s,
-                100 - allocation
-            FROM dictator_game_player
-            WHERE prolific_id = %s
-              AND allocation IS NOT NULL
-              AND allocation BETWEEN 0 AND 100
-              AND round_number BETWEEN %s AND %s
-            ORDER BY round_number
-            """,
-            [
-                recipient_prolific_id,
-                chosen_part,
-                allocator_pid,
-                round_start,
-                round_end,
-            ]
-        )
-
-        if cursor.rowcount == 0:
-            raise RuntimeError(
-                f"Allocator {allocator_pid} has no rounds in part {chosen_part}."
+                WHERE prolific_id = %s
+                  AND allocation IS NOT NULL
+                  AND allocation BETWEEN 0 AND 100
+                  AND round_number BETWEEN %s AND %s
+                ORDER BY round_number
+                """,
+                [
+                    recipient_prolific_id,
+                    chosen_part,
+                    allocator_pid,
+                    round_start,
+                    round_end,
+                ]
             )
 
+            if cursor.rowcount == 0:
+                raise RuntimeError(
+                    f"Allocator {allocator_pid} has no rounds in part {chosen_part}."
+                )
+
+    finally:
+        connection.close()
 
 # ==================================================
 # ASSIGN-ON-FIRST-LOGIN LOGIC
