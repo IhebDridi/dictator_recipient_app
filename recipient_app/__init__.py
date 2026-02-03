@@ -242,7 +242,7 @@ page_sequence = [
 def assign_allocations_if_needed(recipient_prolific_id):
     try:
         with connection.cursor() as cursor:
-
+            # 1: Check whether the recipient was already assigned
             cursor.execute(
                 """
                 SELECT 1
@@ -254,7 +254,7 @@ def assign_allocations_if_needed(recipient_prolific_id):
             )
             if cursor.fetchone():
                 return
-
+            # 2: Randomly select one valid dictator–part pair
             cursor.execute(
                 """
                 SELECT prolific_id, part
@@ -279,11 +279,11 @@ def assign_allocations_if_needed(recipient_prolific_id):
             row = cursor.fetchone()
             if not row:
                 raise RuntimeError("No valid allocator/part combination available.")
-
+            # 3: Determine which rounds belong to the chosen part
             allocator_pid, chosen_part = row
             round_start = (chosen_part - 1) * 10 + 1
             round_end = chosen_part * 10
-
+            # 4: Copy dictator decisions into recipient table
             cursor.execute(
                 """
                 INSERT INTO recipient_allocations
@@ -313,7 +313,7 @@ def assign_allocations_if_needed(recipient_prolific_id):
                     round_end,
                 ]
             )
-
+            # 5: Validate successful insertion
             if cursor.rowcount == 0:
                 raise RuntimeError(
                     f"Allocator {allocator_pid} has no rounds in part {chosen_part}."
