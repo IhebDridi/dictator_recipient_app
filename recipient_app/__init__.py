@@ -347,6 +347,21 @@ def assign_allocations_if_needed(recipient_prolific_id, x=80):
         # --------------------------------------------------
         # 3) Select random UNUSED dictator rounds
         # --------------------------------------------------
+
+            #        WHERE d.allocation IS NOT NULL
+            #  AND d.allocation <> 0
+            #  AND d.prolific_id IS NOT NULL
+            #  AND CASE
+            #        WHEN d.round_number BETWEEN 1 AND 10  THEN 1
+            #        WHEN d.round_number BETWEEN 11 AND 20 THEN 2
+            #        WHEN d.round_number BETWEEN 21 AND 30 THEN 3
+            #      END = d.random_payoff_part
+            #  AND NOT EXISTS (
+            #      SELECT 1
+            #      FROM recipient_allocations r
+            #      WHERE r.dictator_prolific_id = d.prolific_id
+            #        AND r.round_number = d.round_number
+            #  )
         cursor.execute(
             f"""
             SELECT
