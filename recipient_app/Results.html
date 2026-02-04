@@ -4,7 +4,11 @@
 <div class="modern-container">
 
     <h1 class="main-title">Your Results</h1>
-
+    {% if viewing_other %}
+        <strong>Viewing Prolific ID:</strong> {{ recipient_prolific_id }}
+    {% else %}
+        <strong>Your Prolific ID:</strong> {{ recipient_prolific_id }}
+    {% endif %}
     {% if already_assigned %}
         <p class="summary-note" style="color:#b00020;">
             <strong>Note:</strong>

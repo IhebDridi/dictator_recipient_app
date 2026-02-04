@@ -19,6 +19,7 @@ class C(BaseConstants):
     NAME_IN_URL = 'recipient'
     PLAYERS_PER_GROUP = None
     NUM_ROUNDS = 1
+    EXCLUDE_DICTATOR_KEEPS_ZERO = True  #  SWITCH for allocation = 0
 
 
 class Subsession(BaseSubsession):
@@ -33,6 +34,8 @@ class Group(BaseGroup):
 # Player model (recipient only)
 # --------------------------------------------------
 class Player(BasePlayer):
+    delete_recipient_id = models.StringField(blank=True) # to delete recipient info in deubg mode
+    view_recipient_id = models.StringField(blank=True)  # to view recipient info in deubg mode
 
     prolific_id = models.StringField(blank=False, label="Please enter your Prolific ID")
 
@@ -60,20 +63,20 @@ class InformedConsent(Page):
         pid = self.prolific_id.strip()
         self.participant.label = pid  # display only
 
-        # ✅ STEP 1: check if this Prolific ID already has allocations
+        # STEP 1: check if this Prolific ID already has allocations
         already_assigned = recipient_has_allocations(pid)
 
         self.participant.vars['already_assigned'] = already_assigned
 
-        # ✅ If YES → do nothing else, results must be shown later
+        # If YES → do nothing else, results must be shown later
         if already_assigned:
             self.participant.vars['exhausted'] = False
             return
 
-        # ✅ STEP 2: this is a NEW Prolific ID → try to assign
+        # STEP 2: this is a NEW Prolific ID → try to assign
         success = assign_allocations_if_needed(pid, x=80)
 
-        # ✅ STEP 3: mark exhaustion only for NEW IDs
+        # STEP 3: mark exhaustion only for NEW IDs
         self.participant.vars['exhausted'] = (success is False)
 
 
@@ -135,9 +138,17 @@ class Results(Page):
         return self.round_number == 1
 
     def vars_for_template(self):
-        recipient_key = self.participant.label
 
-        already_assigned = self.participant.vars.get('already_assigned', False)
+        view_recipient_id = self.participant.vars.get('view_recipient_id')
+
+        if view_recipient_id:
+            recipient_key = view_recipient_id
+            viewing_other = True
+            already_assigned = False
+        else:
+            recipient_key = self.participant.label
+            viewing_other = False
+            already_assigned = self.participant.vars.get('already_assigned', False)
 
         with connection.cursor() as cursor:
             cursor.execute(
@@ -154,25 +165,26 @@ class Results(Page):
             )
             rows_raw = cursor.fetchall()
 
-        if not rows_raw:
-            raise RuntimeError("No recipient allocations found.")
-
         rows = [
             {
-                "dictator_round": dictator_round,
                 "received": received,
                 "allocated": 100 - received,
-                "dictator_id": dictator_pid,   # ✅ now defined
+                "dictator_id": dictator_pid,
             }
-            for dictator_round, received, dictator_pid in rows_raw
+            for _, received, dictator_pid in rows_raw
         ]
+
         return {
             "rows": rows,
-            "total_received": sum(r["received"] for r in rows),
             "n_rounds": len(rows),
             "n_dictators": len({pid for _, _, pid in rows_raw}),
+            "total_received": sum(r["received"] for r in rows),
+
+            # DEFINE IT HERE
+            "recipient_prolific_id": recipient_key,
+
             "already_assigned": already_assigned,
-            "recipient_prolific_id": self.participant.label,  # ✅ NEW
+            "viewing_other": viewing_other,
         }
 
 
@@ -228,17 +240,63 @@ class Exhausted(Page):
     def is_displayed(self):
         return self.participant.vars.get('exhausted', False)
 
+class AllocationOverview(Page):
+    form_model = 'player'
+    form_fields = ['delete_recipient_id', 'view_recipient_id']
+
+    def is_displayed(self):
+        return self.round_number == 1
+
+    def vars_for_template(self):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    recipient_prolific_id,
+                    COUNT(*) AS n_rounds
+                FROM recipient_allocations
+                GROUP BY recipient_prolific_id
+                ORDER BY recipient_prolific_id
+                """
+            )
+            rows = cursor.fetchall()
+
+        return {
+            "overview": [
+                {"recipient_id": rid, "n_rounds": n}
+                for rid, n in rows
+            ]
+        }
+
+    def before_next_page(self, timeout_happened=False):
+
+        # ✅ delete action
+        if self.delete_recipient_id:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    DELETE FROM recipient_allocations
+                    WHERE recipient_prolific_id = %s
+                    """,
+                    [self.delete_recipient_id]
+                )
+
+        # ✅ view action (display only)
+        if self.view_recipient_id:
+            self.participant.vars['view_recipient_id'] = self.view_recipient_id
 # --------------------------------------------------
 # PAGE SEQUENCE
 # --------------------------------------------------
 page_sequence = [
+    #AllocationOverview,
+    #Results, #this one and the one above it are for debug mode
     InformedConsent,
     Instructions,
     ComprehensionTest,
     FailedTest,
     Exhausted,
     Results,
-    Debriefing,
+    #Debriefing,
     ThankYou,
 ]
 
@@ -247,9 +305,24 @@ page_sequence = [
 # ALLOCATION ASSIGNMENT (SAFE)
 # --------------------------------------------------
 def assign_allocations_if_needed(recipient_prolific_id, x=80):
+    """
+    Assign up to x random dictator rounds to a recipient.
+
+    Rules:
+    - A recipient is assigned at most once (idempotent).
+    - Dictator rounds are never reused globally.
+    - Dictator rounds where the dictator kept 0
+      (i.e. allocation = 100) are EXCLUDED.
+    - Returns:
+        True  -> allocations exist or were successfully created
+        False -> no eligible rounds left (pool exhausted)
+    """
 
     with connection.cursor() as cursor:
 
+        # --------------------------------------------------
+        # 1) If recipient already has allocations → do nothing
+        # --------------------------------------------------
         cursor.execute(
             """
             SELECT 1
@@ -260,10 +333,22 @@ def assign_allocations_if_needed(recipient_prolific_id, x=80):
             [recipient_prolific_id]
         )
         if cursor.fetchone():
-            return
+            return True
 
+        # --------------------------------------------------
+        # 2) Build exclusion condition
+        #    Exclude rounds where dictator kept 0
+        #    dictator keeps 0 ⇔ allocation = 100
+        # --------------------------------------------------
+        extra_condition = ""
+        if C.EXCLUDE_DICTATOR_KEEPS_ZERO:
+            extra_condition = "AND d.allocation <> 0"
+
+        # --------------------------------------------------
+        # 3) Select random UNUSED dictator rounds
+        # --------------------------------------------------
         cursor.execute(
-            """
+            f"""
             SELECT
                 d.prolific_id,
                 d.round_number,
@@ -276,6 +361,7 @@ def assign_allocations_if_needed(recipient_prolific_id, x=80):
             FROM dictator_game_player d
             WHERE d.allocation IS NOT NULL
               AND d.prolific_id IS NOT NULL
+              {extra_condition}
               AND NOT EXISTS (
                   SELECT 1
                   FROM recipient_allocations r
@@ -290,9 +376,16 @@ def assign_allocations_if_needed(recipient_prolific_id, x=80):
 
         rows = cursor.fetchall()
 
+        # --------------------------------------------------
+        # 4) If nothing eligible left → exhausted
+        # --------------------------------------------------
         if not rows:
             return False
 
+        # --------------------------------------------------
+        # 5) Insert selected rounds
+        #    Recipient receives = 100 - allocation
+        # --------------------------------------------------
         cursor.executemany(
             """
             INSERT INTO recipient_allocations
@@ -306,17 +399,16 @@ def assign_allocations_if_needed(recipient_prolific_id, x=80):
             [
                 (
                     recipient_prolific_id,
-                    pid,
-                    rnd,
+                    dictator_pid,
+                    round_number,
                     part,
                     100 - allocation
                 )
-                for pid, rnd, part, allocation in rows
+                for dictator_pid, round_number, part, allocation in rows
             ]
         )
-        return True
 
-
+    return True
 def recipient_has_allocations(recipient_prolific_id):
     with connection.cursor() as cursor:
         cursor.execute(
@@ -356,7 +448,7 @@ def recipient_has_allocations(recipient_prolific_id):
 #            [recipient_prolific_id]
 #        )
 #        if cursor.fetchone():
-#            return  # ✅ already assigned, do nothing
+#            return  # already assigned, do nothing
 #
 #        # --------------------------------------------------
 #        # 2) Choose ONE allocator + ONE part
