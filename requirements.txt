@@ -2,7 +2,7 @@ aiofiles==0.6.0
 asgiref==3.11.0
 click==7.1.2
 dj-database-url==3.1.0
-Django==6.0.1
+Django==6.0.2
 dotenv==0.9.9
 h11==0.16.0
 itsdangerous==1.1.0
