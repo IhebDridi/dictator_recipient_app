@@ -182,7 +182,7 @@ class Results(Page):
         return {
             "rows": rows,
             "n_rounds": len(rows),
-            "n_dictators": len({pid for _, _, pid in rows_raw}),
+            "n_dictators": len({pid for _, _, pid, _ in rows_raw}),
             "total_received": sum(r["received"] for r in rows),
 
             # DEFINE IT HERE
