@@ -157,7 +157,11 @@ class Results(Page):
                     r.round_number,
                     r.allocated_value,
                     r.dictator_prolific_id,
-                    d.value
+                    d.value,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY d.dictator_id
+                        ORDER BY d.round_n
+                    ) AS dictator_row_number
                 FROM recipient_allocations r
                 JOIN dictator_values d
                 ON d.dictator_id = r.dictator_prolific_id
@@ -177,11 +181,12 @@ class Results(Page):
                 "dictator_id": dictator_pid,
                 "dictator_value": dictator_value,
             }
-            for round_n, received, dictator_pid, dictator_value in rows_raw
+            for round_n, received, dictator_pid, dictator_value, dictator_row in rows_raw
         ]
 
         return {
             "rows": rows,
+            "dictator_row": dictator_row,
             "n_rounds": len(rows),
             "n_dictators": len({pid for _, _, pid, _ in rows_raw}),
             "total_received": sum(r["received"] for r in rows),
