@@ -159,15 +159,14 @@ class Results(Page):
                     r.dictator_prolific_id,
                     d.value,
                     ROW_NUMBER() OVER (
-                        PARTITION BY d.dictator_id
-                        ORDER BY d.round_n
+                        ORDER BY d.dictator_id, d.round_n
                     ) AS dictator_row_number
                 FROM recipient_allocations r
                 JOIN dictator_values d
                 ON d.dictator_id = r.dictator_prolific_id
                 AND d.round_n = r.round_number
                 WHERE r.recipient_prolific_id = %s
-                ORDER BY r.round_number
+                ORDER BY r.id
                 """,
                 [recipient_key]
             )
