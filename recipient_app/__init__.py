@@ -176,6 +176,7 @@ class Results(Page):
         rows = [
             {
                 "round_number": round_n,
+                "dictator_row": dictator_row,
                 "received": received,
                 "allocated": 100 - received,
                 "dictator_id": dictator_pid,
