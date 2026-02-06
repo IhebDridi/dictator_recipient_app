@@ -186,14 +186,10 @@ class Results(Page):
 
         return {
             "rows": rows,
-            "dictator_row": dictator_row,
             "n_rounds": len(rows),
             "n_dictators": len({pid for _, _, pid, _ in rows_raw}),
             "total_received": sum(r["received"] for r in rows),
-
-            # DEFINE IT HERE
             "recipient_prolific_id": recipient_key,
-
             "already_assigned": already_assigned,
             "viewing_other": viewing_other,
         }
