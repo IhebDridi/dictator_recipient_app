@@ -74,7 +74,7 @@ class InformedConsent(Page):
             return
 
         # STEP 2: this is a NEW Prolific ID → try to assign
-        success = assign_allocations_if_needed(pid, x=80)
+        success = assign_allocations_from_dictator_values(pid, x=80")
 
         # STEP 3: mark exhaustion only for NEW IDs
         self.participant.vars['exhausted'] = (success is False)
@@ -304,18 +304,23 @@ page_sequence = [
 # --------------------------------------------------
 # ALLOCATION ASSIGNMENT (SAFE)
 # --------------------------------------------------
-def assign_allocations_if_needed(recipient_prolific_id, x=80):
+# --------------------------------------------------
+# ALLOCATION ASSIGNMENT FROM dictator_values (NEW)
+# --------------------------------------------------
+# --------------------------------------------------
+# ALLOCATION ASSIGNMENT FROM dictator_values (NEW)
+# --------------------------------------------------
+def assign_allocations_from_dictator_values(
+    recipient_prolific_id,
+    x=80,
+):
     """
-    Assign up to x random dictator rounds to a recipient.
+    Assign up to x rounds to a recipient directly from dictator_values.
 
     Rules:
     - A recipient is assigned at most once (idempotent).
-    - Dictator rounds are never reused globally.
-    - Dictator rounds where the dictator kept 0
-      (i.e. allocation = 100) are EXCLUDED.
-    - Returns:
-        True  -> allocations exist or were successfully created
-        False -> no eligible rounds left (pool exhausted)
+    - Each (dictator_id, round_n) pair is used at most once globally.
+    - Type does NOT affect selection; it is stored only.
     """
 
     with connection.cursor() as cursor:
@@ -336,53 +341,22 @@ def assign_allocations_if_needed(recipient_prolific_id, x=80):
             return True
 
         # --------------------------------------------------
-        # 2) Build exclusion condition
-        #    Exclude rounds where dictator kept 0
-        #    dictator keeps 0 ⇔ allocation = 100
+        # 2) Select UNUSED dictator_values rows (ALL TYPES)
         # --------------------------------------------------
-        extra_condition = ""
-        if C.EXCLUDE_DICTATOR_KEEPS_ZERO:
-            extra_condition = "AND d.allocation <> 0"
-
-        # --------------------------------------------------
-        # 3) Select random UNUSED dictator rounds
-        # --------------------------------------------------
-
-            #        WHERE d.allocation IS NOT NULL
-            #  AND d.allocation <> 0
-            #  AND d.prolific_id IS NOT NULL
-            #  AND CASE
-            #        WHEN d.round_number BETWEEN 1 AND 10  THEN 1
-            #        WHEN d.round_number BETWEEN 11 AND 20 THEN 2
-            #        WHEN d.round_number BETWEEN 21 AND 30 THEN 3
-            #      END = d.random_payoff_part
-            #  AND NOT EXISTS (
-            #      SELECT 1
-            #      FROM recipient_allocations r
-            #      WHERE r.dictator_prolific_id = d.prolific_id
-            #        AND r.round_number = d.round_number
-            #  )
         cursor.execute(
-            f"""
+            """
             SELECT
-                d.prolific_id,
-                d.round_number,
-                CASE
-                    WHEN d.round_number BETWEEN 1 AND 10 THEN 1
-                    WHEN d.round_number BETWEEN 11 AND 20 THEN 2
-                    WHEN d.round_number BETWEEN 21 AND 30 THEN 3
-                END AS part,
-                d.allocation
-            FROM dictator_game_player d
-            WHERE d.allocation IS NOT NULL
-              AND d.prolific_id IS NOT NULL
-              {extra_condition}
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM recipient_allocations r
-                  WHERE r.dictator_prolific_id = d.prolific_id
-                    AND r.round_number = d.round_number
-              )
+                d.dictator_id,
+                d.round_n,
+                d.value,
+                d.type
+            FROM dictator_values d
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM recipient_allocations r
+                WHERE r.dictator_prolific_id = d.dictator_id
+                  AND r.round_number = d.round_n
+            )
             ORDER BY RANDOM()
             LIMIT %s
             """,
@@ -392,14 +366,13 @@ def assign_allocations_if_needed(recipient_prolific_id, x=80):
         rows = cursor.fetchall()
 
         # --------------------------------------------------
-        # 4) If nothing eligible left → exhausted
+        # 3) If nothing eligible left → exhausted
         # --------------------------------------------------
         if not rows:
             return False
 
         # --------------------------------------------------
-        # 5) Insert selected rounds
-        #    Recipient receives = 100 - allocation
+        # 4) Insert selected rounds (store type)
         # --------------------------------------------------
         cursor.executemany(
             """
@@ -414,16 +387,18 @@ def assign_allocations_if_needed(recipient_prolific_id, x=80):
             [
                 (
                     recipient_prolific_id,
-                    dictator_pid,
-                    round_number,
-                    part,
-                    100 - allocation
+                    dictator_id,
+                    round_n,
+                    type_,
+                    int(value * 100),
                 )
-                for dictator_pid, round_number, part, allocation in rows
+                for dictator_id, round_n, value, type_ in rows
             ]
         )
 
     return True
+
+
 def recipient_has_allocations(recipient_prolific_id):
     with connection.cursor() as cursor:
         cursor.execute(
