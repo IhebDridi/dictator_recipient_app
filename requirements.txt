@@ -1,3 +1,5 @@
 otree>=6.0.8
 psycopg2>=2.8.4
 numpy
+dj_database_url
+dotenv
