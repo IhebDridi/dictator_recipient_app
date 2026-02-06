@@ -154,12 +154,16 @@ class Results(Page):
             cursor.execute(
                 """
                 SELECT
-                    round_number,
-                    allocated_value,
-                    dictator_prolific_id
-                FROM recipient_allocations
-                WHERE recipient_prolific_id = %s
-                ORDER BY round_number
+                    r.round_number,
+                    r.allocated_value,
+                    r.dictator_prolific_id,
+                    d.value
+                FROM recipient_allocations r
+                JOIN dictator_values d
+                ON d.dictator_id = r.dictator_prolific_id
+                AND d.round_n = r.round_number
+                WHERE r.recipient_prolific_id = %s
+                ORDER BY r.round_number
                 """,
                 [recipient_key]
             )
@@ -170,8 +174,9 @@ class Results(Page):
                 "received": received,
                 "allocated": 100 - received,
                 "dictator_id": dictator_pid,
+                "dictator_value": dictator_value,
             }
-            for _, received, dictator_pid in rows_raw
+            for _, received, dictator_pid, dictator_value in rows_raw
         ]
 
         return {
@@ -270,7 +275,7 @@ class AllocationOverview(Page):
 
     def before_next_page(self, timeout_happened=False):
 
-        # ✅ delete action
+        #  delete action
         if self.delete_recipient_id:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -281,7 +286,7 @@ class AllocationOverview(Page):
                     [self.delete_recipient_id]
                 )
 
-        # ✅ view action (display only)
+        #  view action (display only)
         if self.view_recipient_id:
             self.participant.vars['view_recipient_id'] = self.view_recipient_id
 # --------------------------------------------------
