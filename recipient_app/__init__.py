@@ -171,12 +171,13 @@ class Results(Page):
 
         rows = [
             {
+                "round_number": round_n,
                 "received": received,
                 "allocated": 100 - received,
                 "dictator_id": dictator_pid,
                 "dictator_value": dictator_value,
             }
-            for _, received, dictator_pid, dictator_value in rows_raw
+            for round_n, received, dictator_pid, dictator_value in rows_raw
         ]
 
         return {

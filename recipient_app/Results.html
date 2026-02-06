@@ -28,7 +28,8 @@
     <table class="styled-table">
         <thead>
             <tr>
-                <th>Round</th>
+                <th>Recipient round</th>
+                <th>Dictator round</th>
                 <th>Allocator kept</th>
                 <th>You received</th>
                 <th>Dictator value</th>
@@ -39,6 +40,7 @@
             {% for r in rows %}
                 <tr>
                     <td>{{ forloop.counter }}</td>
+                    <td>{{ r.round_number }}</td>
                     <td>{{ r.allocated }}</td>
                     <td>{{ r.received }}</td>
                     <td>{{ r.dictator_value }}</td>
@@ -46,7 +48,6 @@
                 </tr>
             {% endfor %}
         </tbody>
-        </table>
     </table>
 
     <p class="part-total">
