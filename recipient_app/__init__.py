@@ -74,7 +74,7 @@ class InformedConsent(Page):
             return
 
         # STEP 2: this is a NEW Prolific ID → try to assign
-        success = assign_allocations_from_dictator_values(pid, x=80")
+        success = assign_allocations_from_dictator_values(pid, x=80)
 
         # STEP 3: mark exhaustion only for NEW IDs
         self.participant.vars['exhausted'] = (success is False)
