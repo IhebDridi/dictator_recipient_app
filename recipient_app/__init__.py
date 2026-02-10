@@ -361,29 +361,32 @@ def assign_allocations_from_game_pages_player(
         # --------------------------------------------------
         cursor.execute(
             """
-            SELECT
-                p.prolific_id,
-                p.round_number,
-                p.allocation
-            FROM game_pages_player p
-            WHERE
-                p.allocation IS NOT NULL
-                AND p.prolific_id IS NOT NULL
+        SELECT DISTINCT ON (p.prolific_id, p.round_number)
+            p.prolific_id,
+            p.round_number,
+            p.allocation
+        FROM game_pages_player p
+        WHERE
+            p.allocation IS NOT NULL
+            AND p.prolific_id IS NOT NULL
 
-                AND EXISTS (
-                    SELECT 1
-                    FROM dictator_values d
-                    WHERE d.dictator_id = p.prolific_id
-                )
+            AND EXISTS (
+                SELECT 1
+                FROM dictator_values d
+                WHERE d.dictator_id = p.prolific_id
+            )
 
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM recipient_allocations r
-                    WHERE r.dictator_prolific_id = p.prolific_id
-                      AND r.round_number = p.round_number
-                )
-            ORDER BY RANDOM()
-            LIMIT %s
+            AND NOT EXISTS (
+                SELECT 1
+                FROM recipient_allocations r
+                WHERE r.dictator_prolific_id = p.prolific_id
+                AND r.round_number = p.round_number
+            )
+        ORDER BY
+            p.prolific_id,
+            p.round_number,
+            p.id          -- ✅ deterministic choice within duplicates
+        LIMIT %s
             """,
             [remaining]
         )
