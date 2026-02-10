@@ -317,23 +317,21 @@ page_sequence = [
 # --------------------------------------------------
 # ALLOCATION ASSIGNMENT FROM dictator_values (NEW)
 # --------------------------------------------------
-def assign_allocations_from_dictator_values(
+def assign_allocations_from_dictator_game_player(
     recipient_prolific_id,
     x=80,
 ):
     """
-    Assign up to x rounds to a recipient directly from dictator_values.
+    Assign up to x dictator rounds to a recipient.
 
-    Rules:
-    - A recipient is assigned at most once (idempotent).
-    - Each (dictator_id, round_n) pair is used at most once globally.
-    - Type does NOT affect selection; it is stored only.
+    Source table: dictator_game_player
+    Validity filter: dictator must exist in dictator_values
     """
 
     with connection.cursor() as cursor:
 
         # --------------------------------------------------
-        # 1) If recipient already has allocations → do nothing
+        # 1) Idempotency: recipient already assigned → exit
         # --------------------------------------------------
         cursor.execute(
             """
@@ -348,22 +346,33 @@ def assign_allocations_from_dictator_values(
             return True
 
         # --------------------------------------------------
-        # 2) Select UNUSED dictator_values rows (ALL TYPES)
+        # 2) Select eligible, unused dictator rounds
         # --------------------------------------------------
         cursor.execute(
             """
             SELECT
-                d.dictator_id,
-                d.round_n,
-                d.value,
-                d.type
-            FROM dictator_values d
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM recipient_allocations r
-                WHERE r.dictator_prolific_id = d.dictator_id
-                  AND r.round_number = d.round_n
-            )
+                p.prolific_id,
+                p.round_number,
+                p.allocation
+            FROM dictator_game_player p
+            WHERE
+                p.prolific_id IS NOT NULL
+                AND p.allocation IS NOT NULL
+
+                -- ✅ dictator must be whitelisted
+                AND EXISTS (
+                    SELECT 1
+                    FROM dictator_values d
+                    WHERE d.dictator_id = p.prolific_id
+                )
+
+                -- ✅ round not used yet
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM recipient_allocations r
+                    WHERE r.dictator_prolific_id = p.prolific_id
+                      AND r.round_number = p.round_number
+                )
             ORDER BY RANDOM()
             LIMIT %s
             """,
@@ -373,13 +382,13 @@ def assign_allocations_from_dictator_values(
         rows = cursor.fetchall()
 
         # --------------------------------------------------
-        # 3) If nothing eligible left → exhausted
+        # 3) Exhaustion check
         # --------------------------------------------------
         if not rows:
             return False
 
         # --------------------------------------------------
-        # 4) Insert selected rounds (store type)
+        # 4) Insert into recipient_allocations
         # --------------------------------------------------
         cursor.executemany(
             """
@@ -396,15 +405,14 @@ def assign_allocations_from_dictator_values(
                     recipient_prolific_id,
                     dictator_id,
                     round_n,
-                    type_,
-                    int(value * 100),
+                    None,                    # or compute part if needed
+                    100 - allocation,        # recipient payoff
                 )
-                for dictator_id, round_n, value, type_ in rows
+                for dictator_id, round_n, allocation in rows
             ]
         )
 
     return True
-
 
 def recipient_has_allocations(recipient_prolific_id):
     with connection.cursor() as cursor:
