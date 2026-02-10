@@ -190,10 +190,7 @@ These guarantees ensure:
 ## Production Configuration
 
 - `OTREE_PRODUCTION=1`
-- Gunicorn used as WSGI server:
-  ```
-  gunicorn otree.wsgi:application
-  ```
+
 - PostgreSQL with SSL enforced.
 - Session size set manually to **80 participants**.
 
