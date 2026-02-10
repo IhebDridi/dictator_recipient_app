@@ -114,7 +114,7 @@ class ComprehensionTest(Page):
                 self.player.is_excluded = True
                 return None
 
-            # ✅ only show message AFTER first failed attempt
+            #  only show message AFTER first failed attempt
             return (
                 f"You failed questions {', '.join(wrong)}. "
                 f"You now only have {remaining} more attempts."
@@ -146,7 +146,7 @@ class Results(Page):
         close_old_connections()
         recipient_key = self.participant.label
 
-        # ✅ ASSIGN HERE (not in before_next_page)
+        #  ASSIGN HERE (not in before_next_page)
         success = assign_allocations_from_dictator_csv_minimal(
             recipient_prolific_id=recipient_key,
             x=100,
@@ -371,7 +371,7 @@ def assign_allocations_from_dictator_csv_minimal (
                     (d.random_payoff_part = 2 AND r.round_number BETWEEN 11 AND 20) OR
                     (d.random_payoff_part = 3 AND r.round_number BETWEEN 21 AND 30)
                 )
-                -- ✅ no reuse ever
+                --  no reuse ever
                 AND NOT EXISTS (
                     SELECT 1
                     FROM recipient_allocations ra
@@ -420,8 +420,16 @@ def assign_allocations_from_dictator_csv_minimal (
     return True
 
 
+
+
 def recipient_has_allocations(recipient_prolific_id):
-    close_old_connections()   # For when database connection object is stale
+    #  absolutely required
+    close_old_connections()
+
+    #  defensive: force reconnect if needed
+    if connection.connection is None:
+        connection.ensure_connection()
+
     with connection.cursor() as cursor:
         cursor.execute(
             """
