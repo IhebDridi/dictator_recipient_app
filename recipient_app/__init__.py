@@ -91,8 +91,6 @@ class Instructions(Page):
 class ComprehensionTest(Page):
     form_model = 'player'
     form_fields = ['q1', 'q2', 'q3']
-    def before_next_page(self):
-        self.participant.vars.pop("comp_error_message", None)
 
     def vars_for_template(self):
         return {
@@ -109,20 +107,20 @@ class ComprehensionTest(Page):
         wrong = [q for q, ans in correct.items() if values.get(q) != ans]
 
         if wrong:
-            self.player.comprehension_attempts += 1
-            remaining = 3 - self.player.comprehension_attempts
+            # ✅ self IS the Player
+            self.comprehension_attempts += 1
+            remaining = 3 - self.comprehension_attempts
 
             if remaining <= 0:
-                self.player.is_excluded = True
+                self.is_excluded = True
                 return None
 
-            # ✅ STORE message explicitly
             self.participant.vars["comp_error_message"] = (
                 f"You failed questions {', '.join(wrong)}. "
                 f"You now only have {remaining} more attempts."
             )
 
-            # ✅ prevent oTree default error rendering
+            # prevent default oTree error rendering
             return ""
 
 # --------------------------------------------------
