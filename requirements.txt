@@ -1,4 +1,4 @@
-otree==5.3
+otree>=5.3
 psycopg2>=2.8.4
 numpy
 dj_database_url
