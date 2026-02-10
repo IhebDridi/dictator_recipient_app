@@ -165,9 +165,10 @@ class Results(Page):
                         ORDER BY r.dictator_prolific_id, r.round_number
                     ) AS dictator_row_number
                 FROM recipient_allocations r
-                JOIN dictator_game_player p
+                LEFT JOIN dictator_game_player p
                   ON p.prolific_id = r.dictator_prolific_id
                  AND p.round_number = r.round_number
+                 AND p._role = 'dictator'
                 WHERE r.recipient_prolific_id = %s
                 ORDER BY r.id
                 """,
@@ -196,7 +197,7 @@ class Results(Page):
         return {
             "rows": rows,
             "n_rounds": len(rows),
-            "n_dictators": len({pid for _, _, pid, _, _ in rows_raw}),
+            "n_dictators": len({r["dictator_id"] for r in rows}),
             "total_received": sum(r["received"] for r in rows),
             "recipient_prolific_id": recipient_key,
             "already_assigned": already_assigned,
