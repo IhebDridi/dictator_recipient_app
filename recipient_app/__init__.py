@@ -87,39 +87,43 @@ class Instructions(Page):
 # --------------------------------------------------
 # COMPREHENSION TEST
 # --------------------------------------------------
+
 class ComprehensionTest(Page):
     form_model = 'player'
     form_fields = ['q1', 'q2', 'q3']
+    def before_next_page(self):
+        self.participant.vars.pop("comp_error_message", None)
 
-    def error_message(self, values):
-        correct_answers = {
-            'q1': 'b',
-            'q2': 'c',
-            'q3': 'b',
+    def vars_for_template(self):
+        return {
+            "comp_error_message": self.participant.vars.get("comp_error_message"),
         }
 
-        # which questions are wrong
-        wrong = [
-            q for q, correct in correct_answers.items()
-            if values.get(q) != correct
-        ]
+    def error_message(self, values):
+        correct = {
+            "q1": "b",
+            "q2": "c",
+            "q3": "b",
+        }
+
+        wrong = [q for q, ans in correct.items() if values.get(q) != ans]
 
         if wrong:
             self.player.comprehension_attempts += 1
-
             remaining = 3 - self.player.comprehension_attempts
 
-            # exclude after 3 failed attempts
             if remaining <= 0:
                 self.player.is_excluded = True
                 return None
 
-            #  only show message AFTER first failed attempt
-            return (
+            # ✅ STORE message explicitly
+            self.participant.vars["comp_error_message"] = (
                 f"You failed questions {', '.join(wrong)}. "
                 f"You now only have {remaining} more attempts."
             )
 
+            # ✅ prevent oTree default error rendering
+            return ""
 
 # --------------------------------------------------
 # FAILED TEST

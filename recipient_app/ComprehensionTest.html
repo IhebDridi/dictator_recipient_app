@@ -12,9 +12,11 @@
     </p>
 
 
+{% if comp_error_message %}
 <p class="intro-text error-message">
-    {{ error_message }}
+    {{ comp_error_message }}
 </p>
+{% endif %}
 
 
 
