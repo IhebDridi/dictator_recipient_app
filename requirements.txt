@@ -1,6 +1,5 @@
-otree==5.0.0a21
+otree==5.3
 psycopg2>=2.8.4
 numpy
 dj_database_url
 dotenv
-WTForms==2.3.3
