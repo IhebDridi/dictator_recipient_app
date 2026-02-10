@@ -222,3 +222,6 @@ If you want, I can also:
 - generate a **data‑flow diagram**
 - add a **technical appendix** for reviewers
 - or write a **short participant‑facing description** for Prolific
+
+
+Developped under **OTREE==6.0.10**
