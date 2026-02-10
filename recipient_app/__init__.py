@@ -313,10 +313,9 @@ page_sequence = [
 # --------------------------------------------------
 
 def assign_allocations_from_dictator_csv_minimal (
+    recipient_prolific_id,x=100
+    ):
     close_old_connections()
-    recipient_prolific_id,
-    x=100,
-):
     """
     Assign EXACTLY x rounds to a recipient from dictator_csv_minimal.
 
