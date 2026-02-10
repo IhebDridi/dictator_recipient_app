@@ -300,6 +300,7 @@ page_sequence = [
 # --------------------------------------------------
 
 def assign_allocations_from_dictator_csv_minimal(
+    close_old_connections()
     recipient_prolific_id,
     x=100,
 ):
@@ -407,6 +408,7 @@ def assign_allocations_from_dictator_csv_minimal(
 
 
 def recipient_has_allocations(recipient_prolific_id):
+    close_old_connections()   # For when database connection object is stale
     with connection.cursor() as cursor:
         cursor.execute(
             """
