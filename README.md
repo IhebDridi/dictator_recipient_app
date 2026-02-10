@@ -85,7 +85,7 @@ recipient_allocations
 - Total usable rounds: **8050**
 - Rounds per recipient: **100**
 
-➡️ **Exactly 80 recipients** can be fully assigned.
+**Exactly 80 recipients** can be fully assigned.
 
 For production runs, the session size **must be set to 80**.
 
