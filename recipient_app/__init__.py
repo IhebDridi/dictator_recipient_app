@@ -16,9 +16,9 @@ import random
 # oTree constants: single interaction, no grouping
 # --------------------------------------------------
 class Constants(BaseConstants):
-    NAME_IN_URL = 'recipient'
-    PLAYERS_PER_GROUP = None
-    NUM_ROUNDS = 1
+    name_in_url = 'recipient'
+    players_per_group = None
+    num_rounds = 1
     EXCLUDE_DICTATOR_KEEPS_ZERO = True  #  SWITCH for allocation = 0
 
 
