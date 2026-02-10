@@ -19,7 +19,7 @@ class C(BaseConstants):
     NAME_IN_URL = 'recipient'
     PLAYERS_PER_GROUP = None
     NUM_ROUNDS = 1
-    EXCLUDE_DICTATOR_KEEPS_ZERO = True  #  SWITCH for allocation = 0
+    EXCLUDE_DICTATOR_KEEPS_ZERO = False  #  SWITCH for allocation = 0
 
 
 class Subsession(BaseSubsession):
@@ -165,10 +165,9 @@ class Results(Page):
                         ORDER BY r.dictator_prolific_id, r.round_number
                     ) AS dictator_row_number
                 FROM recipient_allocations r
-                LEFT JOIN dictator_game_player p
+                LEFT JOIN game_pages_player p
                   ON p.prolific_id = r.dictator_prolific_id
                  AND p.round_number = r.round_number
-                 AND p._role = 'dictator'
                 WHERE r.recipient_prolific_id = %s
                 ORDER BY r.id
                 """,
@@ -326,21 +325,23 @@ page_sequence = [
 # --------------------------------------------------
 # ALLOCATION ASSIGNMENT FROM dictator_values (NEW)
 # --------------------------------------------------
-def assign_allocations_from_dictator_game_player(
+def assign_allocations_from_game_pages_player(
     recipient_prolific_id,
-    x=80,
+    x=100,
 ):
     """
-    Assign up to x dictator rounds to a recipient.
+    Assign up to x rounds to a recipient from game_pages_player.
 
-    Source table: dictator_game_player
-    Validity filter: dictator must exist in dictator_values
+    - Source: game_pages_player
+    - Dictator whitelist: dictator_values
+    - No role filter
+    - Each (prolific_id, round_number) used at most once globally
     """
 
     with connection.cursor() as cursor:
 
         # --------------------------------------------------
-        # 1) Idempotency: recipient already assigned → exit
+        # 1) Idempotency: already assigned → do nothing
         # --------------------------------------------------
         cursor.execute(
             """
@@ -355,7 +356,7 @@ def assign_allocations_from_dictator_game_player(
             return True
 
         # --------------------------------------------------
-        # 2) Select eligible, unused dictator rounds
+        # 2) Select eligible, unused rounds
         # --------------------------------------------------
         cursor.execute(
             """
@@ -363,19 +364,19 @@ def assign_allocations_from_dictator_game_player(
                 p.prolific_id,
                 p.round_number,
                 p.allocation
-            FROM dictator_game_player p
+            FROM game_pages_player p
             WHERE
-                p.prolific_id IS NOT NULL
-                AND p.allocation IS NOT NULL
+                p.allocation IS NOT NULL
+                AND p.prolific_id IS NOT NULL
 
-                -- ✅ dictator must be whitelisted
+                -- ✅ whitelist valid dictators
                 AND EXISTS (
                     SELECT 1
                     FROM dictator_values d
                     WHERE d.dictator_id = p.prolific_id
                 )
 
-                -- ✅ round not used yet
+                -- ✅ round not yet used
                 AND NOT EXISTS (
                     SELECT 1
                     FROM recipient_allocations r
@@ -414,8 +415,8 @@ def assign_allocations_from_dictator_game_player(
                     recipient_prolific_id,
                     dictator_id,
                     round_n,
-                    None,                    # or compute part if needed
-                    100 - allocation,        # recipient payoff
+                    None,                 # keep as before
+                    100 - allocation,     # recipient payoff
                 )
                 for dictator_id, round_n, allocation in rows
             ]
