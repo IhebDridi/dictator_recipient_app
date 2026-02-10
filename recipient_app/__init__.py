@@ -132,7 +132,7 @@ class Results(Page):
 
     def is_displayed(self):
         # Only show results if comprehension test passed
-        return self.round_number == 1 and not self.player.is_excluded
+        return self.round_number == 1 and not self.is_excluded
 
     def before_next_page(self, timeout_happened=False):
         """
