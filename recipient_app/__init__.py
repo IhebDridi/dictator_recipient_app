@@ -9,6 +9,10 @@ if not settings.configured:
 
 from otree.api import *
 from django.db import connection
+
+from django.db import close_old_connections
+
+close_old_connections()
 import random
 
 
@@ -305,7 +309,7 @@ page_sequence = [
 # ALLOCATION ASSIGNMENT FROM dictator_values (NEW)
 # --------------------------------------------------
 
-def assign_allocations_from_dictator_csv_minimal(
+def assign_allocations_from_dictator_csv_minimal (
     close_old_connections()
     recipient_prolific_id,
     x=100,
