@@ -3,10 +3,19 @@
 {% block content %}
 <div class="modern-container">
 
-    <h1 class="main-title">Your Results</h1>
+    <h1 class="main-title">Bonus Calculation</h1>
 
     <p class="summary-note">
-        <strong>Your Prolific ID:</strong> {{ recipient_prolific_id }}
+        The following allocations were randomly selected for you.
+        These represent a random collection of decisions made by multiple Allocators
+        across different rounds and parts of their task.
+    </p>
+
+    <p class="summary-note">
+        In the table below, each row is assigned a round number for clarity,
+        though these do not correspond to the original round numbers used by the Allocators.
+        The table shows the amount allocated to you (Allocated)
+        and the amount kept by the Allocator (Kept).
     </p>
 
     <p class="summary-note">
@@ -33,6 +42,11 @@
         </tbody>
     </table>
 
+    <p class="summary-note">
+        Your allocation decisions have been recorded.
+        Please click “Continue” to proceed to the final page of the experiment.
+    </p>
+
     <form method="post">
         <button type="submit" class="modern-btn">
             Continue
@@ -40,6 +54,8 @@
     </form>
 
 </div>
+
+
 
 <style>
 .modern-container {

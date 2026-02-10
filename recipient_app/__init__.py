@@ -42,11 +42,7 @@ class Player(BasePlayer):
     q1 = models.StringField(choices=['a', 'b', 'c', 'd'])
     q2 = models.StringField(choices=['a', 'b', 'c', 'd'])
     q3 = models.StringField(choices=['a', 'b', 'c', 'd'])
-    q4 = models.StringField(choices=['a', 'b', 'c', 'd'])
-    q5 = models.StringField(choices=['a', 'b', 'c', 'd'])
-    q6 = models.StringField(choices=['a', 'b', 'c', 'd'])
-    q7 = models.StringField(choices=['a', 'b'])
-    q8 = models.StringField(choices=['a', 'b'])
+
 
     comprehension_attempts = models.IntegerField(initial=0)
     is_excluded = models.BooleanField(initial=False)
@@ -89,31 +85,36 @@ class Instructions(Page):
 # --------------------------------------------------
 class ComprehensionTest(Page):
     form_model = 'player'
-    form_fields = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8']
-
-    def is_displayed(self):
-        return not self.field_maybe_none('is_excluded')
+    form_fields = ['q1', 'q2', 'q3']
 
     def error_message(self, values):
-        correct = {
+        correct_answers = {
             'q1': 'b',
             'q2': 'c',
             'q3': 'b',
-            'q4': 'd',
-            'q5': 'a',
-            'q6': 'a',
-            'q7': 'b',
-            'q8': 'a',
         }
 
-        wrong = [k for k, v in correct.items() if values.get(k) != v]
+        # which questions are wrong
+        wrong = [
+            q for q, correct in correct_answers.items()
+            if values.get(q) != correct
+        ]
 
         if wrong:
-            self.comprehension_attempts += 1
-            if self.comprehension_attempts >= 3:
-                self.is_excluded = True
+            self.player.comprehension_attempts += 1
+
+            remaining = 3 - self.player.comprehension_attempts
+
+            # exclude after 3 failed attempts
+            if remaining <= 0:
+                self.player.is_excluded = True
                 return None
-            return f"You answered these questions incorrectly: {', '.join(wrong)}"
+
+            # ✅ only show message AFTER first failed attempt
+            return (
+                f"You failed questions {', '.join(wrong)}. "
+                f"You now only have {remaining} more attempts."
+            )
 
 
 # --------------------------------------------------
@@ -122,6 +123,10 @@ class ComprehensionTest(Page):
 class FailedTest(Page):
     def is_displayed(self):
         return self.field_maybe_none('is_excluded')
+class AIdetectionpage(Page):
+
+    def is_displayed(self):
+        return self.participant.label == "GeAI12345678900987654321"
 
 
 # --------------------------------------------------
@@ -294,6 +299,7 @@ page_sequence = [
     FailedTest,
     Exhausted,
     Results,
+    AIdetectionpage,
     #Debriefing,
     ThankYou,
 ]
