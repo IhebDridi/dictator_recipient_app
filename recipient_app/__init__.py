@@ -65,18 +65,17 @@ class InformedConsent(Page):
 
         # STEP 1: check if this Prolific ID already has allocations
         already_assigned = recipient_has_allocations(pid)
-
         self.participant.vars['already_assigned'] = already_assigned
 
-        # If YES → do nothing else, results must be shown later
+        # If YES → do nothing else
         if already_assigned:
             self.participant.vars['exhausted'] = False
             return
 
-        # STEP 2: this is a NEW Prolific ID → try to assign
+        # STEP 2: assign allocations (UPDATED SOURCE TABLE)
         success = assign_allocations_from_game_pages_player(pid, x=100)
 
-        # STEP 3: mark exhaustion only for NEW IDs
+        # STEP 3: mark exhaustion
         self.participant.vars['exhausted'] = (success is False)
 
 
@@ -331,14 +330,17 @@ def assign_allocations_from_game_pages_player(
     x=100,
 ):
     """
-    Assign EXACTLY up to x rounds to a recipient from game_pages_player.
-    Safe against refreshes / double calls.
+    Assign EXACTLY up to x DISTINCT rounds to a recipient from game_pages_player.
+
+    - One logical round = (prolific_id, round_number)
+    - game_pages_player may contain multiple rows per round
+    - Dictators are whitelisted via dictator_values
     """
 
     with connection.cursor() as cursor:
 
         # --------------------------------------------------
-        # 1) How many rounds already assigned?
+        # 1) Count how many rounds already assigned
         # --------------------------------------------------
         cursor.execute(
             """
@@ -349,55 +351,56 @@ def assign_allocations_from_game_pages_player(
             [recipient_prolific_id]
         )
         already_assigned = cursor.fetchone()[0]
-
         remaining = x - already_assigned
 
-        # ✅ If already complete, stop
         if remaining <= 0:
             return True
 
         # --------------------------------------------------
-        # 2) Select ONLY remaining rounds
+        # 2) Select DISTINCT logical rounds
         # --------------------------------------------------
         cursor.execute(
             """
-        SELECT DISTINCT ON (p.prolific_id, p.round_number)
-            p.prolific_id,
-            p.round_number,
-            p.allocation
-        FROM game_pages_player p
-        WHERE
-            p.allocation IS NOT NULL
-            AND p.prolific_id IS NOT NULL
+            SELECT DISTINCT ON (p.prolific_id, p.round_number)
+                p.prolific_id,
+                p.round_number,
+                p.allocation
+            FROM game_pages_player p
+            WHERE
+                p.allocation IS NOT NULL
+                AND p.prolific_id IS NOT NULL
 
-            AND EXISTS (
-                SELECT 1
-                FROM dictator_values d
-                WHERE d.dictator_id = p.prolific_id
-            )
+                AND EXISTS (
+                    SELECT 1
+                    FROM dictator_values d
+                    WHERE d.dictator_id = p.prolific_id
+                )
 
-            AND NOT EXISTS (
-                SELECT 1
-                FROM recipient_allocations r
-                WHERE r.dictator_prolific_id = p.prolific_id
-                AND r.round_number = p.round_number
-            )
-        ORDER BY
-            p.prolific_id,
-            p.round_number,
-            p.id          -- ✅ deterministic choice within duplicates
-        LIMIT %s
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM recipient_allocations r
+                    WHERE r.dictator_prolific_id = p.prolific_id
+                      AND r.round_number = p.round_number
+                )
+            ORDER BY
+                p.prolific_id,
+                p.round_number,
+                p.id
+            LIMIT %s
             """,
             [remaining]
         )
 
         rows = cursor.fetchall()
 
+        # --------------------------------------------------
+        # 3) Exhaustion check
+        # --------------------------------------------------
         if not rows:
             return False
 
         # --------------------------------------------------
-        # 3) Insert
+        # 4) Insert
         # --------------------------------------------------
         cursor.executemany(
             """
