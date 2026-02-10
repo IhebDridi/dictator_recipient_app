@@ -325,38 +325,39 @@ page_sequence = [
 # --------------------------------------------------
 # ALLOCATION ASSIGNMENT FROM dictator_values (NEW)
 # --------------------------------------------------
+
 def assign_allocations_from_game_pages_player(
     recipient_prolific_id,
     x=100,
 ):
     """
-    Assign up to x rounds to a recipient from game_pages_player.
-
-    - Source: game_pages_player
-    - Dictator whitelist: dictator_values
-    - No role filter
-    - Each (prolific_id, round_number) used at most once globally
+    Assign EXACTLY up to x rounds to a recipient from game_pages_player.
+    Safe against refreshes / double calls.
     """
 
     with connection.cursor() as cursor:
 
         # --------------------------------------------------
-        # 1) Idempotency: already assigned → do nothing
+        # 1) How many rounds already assigned?
         # --------------------------------------------------
         cursor.execute(
             """
-            SELECT 1
+            SELECT COUNT(*)
             FROM recipient_allocations
             WHERE recipient_prolific_id = %s
-            LIMIT 1
             """,
             [recipient_prolific_id]
         )
-        if cursor.fetchone():
+        already_assigned = cursor.fetchone()[0]
+
+        remaining = x - already_assigned
+
+        # ✅ If already complete, stop
+        if remaining <= 0:
             return True
 
         # --------------------------------------------------
-        # 2) Select eligible, unused rounds
+        # 2) Select ONLY remaining rounds
         # --------------------------------------------------
         cursor.execute(
             """
@@ -369,14 +370,12 @@ def assign_allocations_from_game_pages_player(
                 p.allocation IS NOT NULL
                 AND p.prolific_id IS NOT NULL
 
-                -- ✅ whitelist valid dictators
                 AND EXISTS (
                     SELECT 1
                     FROM dictator_values d
                     WHERE d.dictator_id = p.prolific_id
                 )
 
-                -- ✅ round not yet used
                 AND NOT EXISTS (
                     SELECT 1
                     FROM recipient_allocations r
@@ -386,19 +385,16 @@ def assign_allocations_from_game_pages_player(
             ORDER BY RANDOM()
             LIMIT %s
             """,
-            [x]
+            [remaining]
         )
 
         rows = cursor.fetchall()
 
-        # --------------------------------------------------
-        # 3) Exhaustion check
-        # --------------------------------------------------
         if not rows:
             return False
 
         # --------------------------------------------------
-        # 4) Insert into recipient_allocations
+        # 3) Insert
         # --------------------------------------------------
         cursor.executemany(
             """
@@ -415,8 +411,8 @@ def assign_allocations_from_game_pages_player(
                     recipient_prolific_id,
                     dictator_id,
                     round_n,
-                    None,                 # keep as before
-                    100 - allocation,     # recipient payoff
+                    None,
+                    100 - allocation,
                 )
                 for dictator_id, round_n, allocation in rows
             ]
