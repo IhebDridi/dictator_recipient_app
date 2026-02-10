@@ -72,11 +72,7 @@ class InformedConsent(Page):
             self.participant.vars['exhausted'] = False
             return
 
-        # STEP 2: assign allocations (UPDATED SOURCE TABLE)
-        success = assign_allocations_from_game_pages_player(pid, x=100)
 
-        # STEP 3: mark exhaustion
-        self.participant.vars['exhausted'] = (success is False)
 
 
 
@@ -135,71 +131,59 @@ class FailedTest(Page):
 class Results(Page):
 
     def is_displayed(self):
-        return self.round_number == 1
+        # Only show results if comprehension test passed
+        return self.round_number == 1 and not self.player.is_excluded
+
+    def before_next_page(self, timeout_happened=False):
+        """
+        Assign allocations only once the Results page is reached
+        (i.e., comprehension test was successful).
+        """
+        pid = self.participant.label
+
+        success = assign_allocations_from_dictator_csv_minimal(
+            recipient_prolific_id=pid,
+            x=100,
+        )
+
+        self.participant.vars['exhausted'] = (success is False)
 
     def vars_for_template(self):
-
-        view_recipient_id = self.participant.vars.get('view_recipient_id')
-
-        if view_recipient_id:
-            recipient_key = view_recipient_id
-            viewing_other = True
-            already_assigned = False
-        else:
-            recipient_key = self.participant.label
-            viewing_other = False
-            already_assigned = self.participant.vars.get(
-                'already_assigned', False
-            )
+        recipient_key = self.participant.label
 
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT
-                    r.round_number,
-                    r.allocated_value,
-                    r.dictator_prolific_id,
-                    p.allocation,
-                    ROW_NUMBER() OVER (
-                        ORDER BY r.dictator_prolific_id, r.round_number
-                    ) AS dictator_row_number
-                FROM recipient_allocations r
-                LEFT JOIN game_pages_player p
-                  ON p.prolific_id = r.dictator_prolific_id
-                 AND p.round_number = r.round_number
-                WHERE r.recipient_prolific_id = %s
-                ORDER BY r.id
+                    round_number,
+                    allocated_value
+                FROM recipient_allocations
+                WHERE recipient_prolific_id = %s
+                ORDER BY round_number
                 """,
                 [recipient_key]
             )
             rows_raw = cursor.fetchall()
 
+        # Build rows for the table
         rows = [
             {
-                "round_number": round_n,
-                "dictator_row": dictator_row,
-                "received": received,
-                "allocated": 100 - received,
-                "dictator_id": dictator_pid,
-                "dictator_value": dictator_allocation,
+                "round": i + 1,
+                "received": received,          # Allocated to recipient
+                "kept": 100 - received,        # What dictator kept
             }
-            for (
-                round_n,
-                received,
-                dictator_pid,
-                dictator_allocation,
-                dictator_row,
-            ) in rows_raw
+            for i, (round_n, received) in enumerate(rows_raw)
         ]
+
+        total_received = sum(r["received"] for r in rows)
 
         return {
             "rows": rows,
             "n_rounds": len(rows),
-            "n_dictators": len({r["dictator_id"] for r in rows}),
-            "total_received": sum(r["received"] for r in rows),
+            "total_received": total_received,
+            # 1 ECoin = 0.1 cents → 100 ECoins = 10 cents
+            "total_cents": total_received / 10,
             "recipient_prolific_id": recipient_key,
-            "already_assigned": already_assigned,
-            "viewing_other": viewing_other,
         }
 
 # --------------------------------------------------
@@ -325,22 +309,23 @@ page_sequence = [
 # ALLOCATION ASSIGNMENT FROM dictator_values (NEW)
 # --------------------------------------------------
 
-def assign_allocations_from_game_pages_player(
+def assign_allocations_from_dictator_csv_minimal(
     recipient_prolific_id,
     x=100,
 ):
     """
-    Assign EXACTLY up to x DISTINCT rounds to a recipient from game_pages_player.
+    Assign EXACTLY x rounds to a recipient from dictator_csv_minimal.
 
-    - One logical round = (prolific_id, round_number)
-    - game_pages_player may contain multiple rows per round
-    - Dictators are whitelisted via dictator_values
+    Rules enforced:
+    - Only rounds allowed by random_payoff_part are used
+    - No round is ever reused globally
+    - Each dictator appears at most once per recipient
     """
 
     with connection.cursor() as cursor:
 
         # --------------------------------------------------
-        # 1) Count how many rounds already assigned
+        # 1) Idempotency: how many already assigned?
         # --------------------------------------------------
         cursor.execute(
             """
@@ -357,35 +342,39 @@ def assign_allocations_from_game_pages_player(
             return True
 
         # --------------------------------------------------
-        # 2) Select DISTINCT logical rounds
+        # 2) Select usable, unused rounds (CORE CHANGE)
         # --------------------------------------------------
         cursor.execute(
             """
-            SELECT DISTINCT ON (p.prolific_id, p.round_number)
-                p.prolific_id,
-                p.round_number,
-                p.allocation
-            FROM game_pages_player p
+            SELECT
+                d.participant AS dictator_id,
+                r.round_number,
+                r.allocation
+            FROM dictator_csv_minimal d
+            CROSS JOIN LATERAL (
+                VALUES
+                    (1, allocation_round1),(2, allocation_round2),(3, allocation_round3),(4, allocation_round4),(5, allocation_round5),
+                    (6, allocation_round6),(7, allocation_round7),(8, allocation_round8),(9, allocation_round9),(10, allocation_round10),
+                    (11, allocation_round11),(12, allocation_round12),(13, allocation_round13),(14, allocation_round14),(15, allocation_round15),
+                    (16, allocation_round16),(17, allocation_round17),(18, allocation_round18),(19, allocation_round19),(20, allocation_round20),
+                    (21, allocation_round21),(22, allocation_round22),(23, allocation_round23),(24, allocation_round24),(25, allocation_round25),
+                    (26, allocation_round26),(27, allocation_round27),(28, allocation_round28),(29, allocation_round29),(30, allocation_round30)
+            ) r(round_number, allocation)
             WHERE
-                p.allocation IS NOT NULL
-                AND p.prolific_id IS NOT NULL
-
-                AND EXISTS (
-                    SELECT 1
-                    FROM dictator_values d
-                    WHERE d.dictator_id = p.prolific_id
+                r.allocation IS NOT NULL
+                AND (
+                    (d.random_payoff_part = 1 AND r.round_number BETWEEN 1  AND 10) OR
+                    (d.random_payoff_part = 2 AND r.round_number BETWEEN 11 AND 20) OR
+                    (d.random_payoff_part = 3 AND r.round_number BETWEEN 21 AND 30)
                 )
-
+                -- ✅ no reuse ever
                 AND NOT EXISTS (
                     SELECT 1
-                    FROM recipient_allocations r
-                    WHERE r.dictator_prolific_id = p.prolific_id
-                      AND r.round_number = p.round_number
+                    FROM recipient_allocations ra
+                    WHERE ra.dictator_prolific_id = d.participant
+                      AND ra.round_number = r.round_number
                 )
-            ORDER BY
-                p.prolific_id,
-                p.round_number,
-                p.id
+            ORDER BY RANDOM()
             LIMIT %s
             """,
             [remaining]
@@ -396,11 +385,11 @@ def assign_allocations_from_game_pages_player(
         # --------------------------------------------------
         # 3) Exhaustion check
         # --------------------------------------------------
-        if not rows:
+        if len(rows) < remaining:
             return False
 
         # --------------------------------------------------
-        # 4) Insert
+        # 4) Insert allocations
         # --------------------------------------------------
         cursor.executemany(
             """
@@ -416,15 +405,16 @@ def assign_allocations_from_game_pages_player(
                 (
                     recipient_prolific_id,
                     dictator_id,
-                    round_n,
-                    None,
-                    100 - allocation,
+                    round_number,
+                    d_part := None,
+                    int(100 - allocation),
                 )
-                for dictator_id, round_n, allocation in rows
+                for dictator_id, round_number, allocation in rows
             ]
         )
 
     return True
+
 
 def recipient_has_allocations(recipient_prolific_id):
     with connection.cursor() as cursor:
