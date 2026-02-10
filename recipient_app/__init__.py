@@ -107,22 +107,24 @@ class ComprehensionTest(Page):
         wrong = [q for q, ans in correct.items() if values.get(q) != ans]
 
         if wrong:
-            # ✅ self IS the Player
             self.comprehension_attempts += 1
             remaining = 3 - self.comprehension_attempts
 
             if remaining <= 0:
                 self.is_excluded = True
-                return None
+                return "You have failed the comprehension test too many times."
 
-            self.participant.vars["comp_error_message"] = (
+            msg = (
                 f"You failed questions {', '.join(wrong)}. "
                 f"You now only have {remaining} more attempts."
             )
 
-            # prevent default oTree error rendering
-            return ""
+            # ✅ store for custom placement
+            self.participant.vars["comp_error_message"] = msg
 
+            # ✅ MUST return non‑empty string to block progression
+            return msg
+        
 # --------------------------------------------------
 # FAILED TEST
 # --------------------------------------------------
