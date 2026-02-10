@@ -143,7 +143,7 @@ class Results(Page):
         return self.round_number == 1 and not self.is_excluded
 
     def vars_for_template(self):
-        close_old_connections()
+        
         recipient_key = self.participant.label
 
         #  ASSIGN HERE (not in before_next_page)
@@ -196,7 +196,7 @@ class Debriefing(Page):
 
     def vars_for_template(self):
         recipient_key = self.participant.label  # 🔧 FIX (was label)
-        close_old_connections()
+        
 
         with connection.cursor() as cursor:
             cursor.execute(
@@ -247,7 +247,7 @@ class AllocationOverview(Page):
         return self.round_number == 1
 
     def vars_for_template(self):
-        close_old_connections()
+        
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -269,7 +269,7 @@ class AllocationOverview(Page):
         }
 
     def before_next_page(self, timeout_happened=False):
-        close_old_connections()
+        
         #  delete action
         if self.delete_recipient_id:
             with connection.cursor() as cursor:
