@@ -131,25 +131,17 @@ class FailedTest(Page):
 class Results(Page):
 
     def is_displayed(self):
-        # Only show results if comprehension test passed
         return self.round_number == 1 and not self.is_excluded
-
-    def before_next_page(self, timeout_happened=False):
-        """
-        Assign allocations only once the Results page is reached
-        (i.e., comprehension test was successful).
-        """
-        pid = self.participant.label
-
-        success = assign_allocations_from_dictator_csv_minimal(
-            recipient_prolific_id=pid,
-            x=100,
-        )
-
-        self.participant.vars['exhausted'] = (success is False)
 
     def vars_for_template(self):
         recipient_key = self.participant.label
+
+        # ✅ ASSIGN HERE (not in before_next_page)
+        success = assign_allocations_from_dictator_csv_minimal(
+            recipient_prolific_id=recipient_key,
+            x=100,
+        )
+        self.participant.vars['exhausted'] = (success is False)
 
         with connection.cursor() as cursor:
             cursor.execute(
@@ -165,12 +157,11 @@ class Results(Page):
             )
             rows_raw = cursor.fetchall()
 
-        # Build rows for the table
         rows = [
             {
                 "round": i + 1,
-                "received": received,          # Allocated to recipient
-                "kept": 100 - received,        # What dictator kept
+                "received": received,
+                "kept": 100 - received,
             }
             for i, (round_n, received) in enumerate(rows_raw)
         ]
@@ -181,7 +172,6 @@ class Results(Page):
             "rows": rows,
             "n_rounds": len(rows),
             "total_received": total_received,
-            # 1 ECoin = 0.1 cents → 100 ECoins = 10 cents
             "total_cents": total_received / 10,
             "recipient_prolific_id": recipient_key,
         }
