@@ -1,86 +1,131 @@
-# Recipient App — Bonus Allocation Viewer
+# Recipient App — Bonus Allocation Viewer (Production Version)
 
 ## Overview
 
-This oTree app implements the **recipient side** of a two‑app experimental setup.  
-Recipients do **not make strategic decisions**. Instead, they are informed about their bonus payments, which are determined by allocation decisions made by allocators in a separate app.
+This oTree app implements the **recipient side** of a two‑stage experimental setup.  
+Recipients are **passive participants**: they do not make any decisions. Instead, they receive bonus payments that are determined by allocation decisions made earlier by multiple allocators.
 
-The app retrieves allocation data from the allocator database, assigns one allocator and one experimental part to each recipient, and displays the resulting bonus.
+Each recipient receives a **set of 100 allocation outcomes**, drawn from a pool of allocator decisions, and their total bonus is calculated as the **sum of all received allocations**.
+
+The app is designed for **production use**, supports **concurrent participants**, and guarantees **no reuse of allocation rounds**.
 
 ---
 
 ## Role of the Recipient
 
-- Recipients do not make allocation decisions.
-- Their bonus depends on decisions made by **one randomly selected allocator**.
-- Only **one part** of the allocator’s experiment is used to determine the recipient’s bonus.
-- The same allocator and part are used consistently throughout the app.
+- Recipients do **not** make any strategic or allocation decisions.
+- They receive allocations determined by **many different allocators**.
+- Each allocation shown comes from a **different allocator**.
+- Allocations are presented round‑by‑round for transparency.
+- The recipient’s total bonus is the **sum of all allocations received across rounds**.
 
 ---
 
 ## Data Source
 
-This app reads allocation data from the allocator app’s database table:
+Allocator decisions are imported from a **preprocessed CSV** into the database table:
 
 ```
-dictator_game_player
+dictator_csv_minimal
 ```
 
-Relevant fields used:
-- `prolific_id` (allocator identifier)
-- `round_number`
-- `allocation` (amount kept by allocator, 0–100)
-
-Recipient payoffs are calculated as:
+Each row corresponds to **one allocator**, with up to **30 allocation rounds**:
 
 ```
-recipient received = 100 − allocation
+allocation_round1 … allocation_round30
 ```
+
+Additionally, each allocator has a column:
+
+```
+random_payoff_part ∈ {1, 2, 3}
+```
+
+This determines which subset of rounds is usable for payoffs.
+
+---
+
+## Usable Rounds per Allocator
+
+Each allocator contributes **exactly 10 usable rounds**, determined as follows:
+
+- `random_payoff_part = 1` → rounds **1–10**
+- `random_payoff_part = 2` → rounds **11–20**
+- `random_payoff_part = 3` → rounds **21–30**
+
+All other rounds are ignored entirely.
 
 ---
 
 ## Allocation Assignment Logic
 
-The assignment is handled by the function:
+Allocation assignment is handled by:
 
 ```
-assign_allocations_if_needed(recipient_prolific_id)
+assign_allocations_from_dictator_csv_minimal(recipient_prolific_id, x=100)
 ```
 
 ### Logic summary
 
-- Runs once per recipient (idempotent).
-- Randomly selects **one valid (allocator, part) pair** that exists in the data.
-- Part definitions:
-  - Part 1 → rounds 1–10
-  - Part 2 → rounds 11–20
-  - Part 3 → rounds 21–30
-- All available rounds for that allocator and part are selected.
-- For each round:
-  - Allocator kept amount is read from the database.
-  - Recipient received amount is computed as `100 − allocation`.
-- Results are written to the table:
+- Runs **once per recipient** (idempotent).
+- Uses only **usable rounds** based on `random_payoff_part`.
+- Randomly selects **100 distinct allocator–round pairs**.
+- **No reuse is allowed**:
+  - A dictator–round pair is never assigned to more than one recipient.
+- Assignments are written to:
 
 ```
 recipient_allocations
 ```
 
+### Capacity constraint
+
+- Number of allocators: **805**
+- Usable rounds per allocator: **10**
+- Total usable rounds: **8050**
+- Rounds per recipient: **100**
+
+➡️ **Exactly 80 recipients** can be fully assigned.
+
+For production runs, the session size **must be set to 80**.
+
 ---
 
 ## Stored Recipient Data
 
-For each recipient, the following information is stored in `recipient_allocations`:
+For each recipient, `recipient_allocations` stores:
 
 - `recipient_prolific_id`
 - `dictator_prolific_id`
 - `round_number`
-- `part`
-- `allocated_value` (amount received by the recipient)
+- `allocated_value` (ECoins received by the recipient)
 
-This ensures that:
-- Results and Debriefing always match.
-- The chosen allocator and part never change.
-- Refreshing pages does not re‑randomize outcomes.
+This guarantees:
+
+- Assignments are persistent.
+- Page refreshes do not re‑randomize outcomes.
+- Results and final summaries always match stored data.
+
+---
+
+## Bonus Calculation
+
+- Each round starts with **100 ECoins**.
+- The allocator keeps some amount; the remainder is received by the recipient.
+- Recipient payoff per round is stored directly as `allocated_value`.
+
+### Total bonus
+
+```
+total_received = sum of allocated_value over all rounds
+```
+
+Conversion:
+
+- **10 ECoins = 1 cent**
+- **100 cents = 1 euro**
+
+The Results page displays both ECoins and the converted monetary amount.
 
 ---
 
@@ -88,65 +133,92 @@ This ensures that:
 
 1. **Informed Consent**
    - Recipient enters Prolific ID.
-   - Prolific ID is stored as `participant.label`.
+   - Stored as `participant.label`.
 
 2. **Instructions**
+   - Explains the passive receiver role.
 
 3. **Comprehension Test**
    - Recipients must pass to proceed.
-   - Failed participants are excluded.
+   - Three attempts allowed.
+   - Failed attempts show which questions were wrong and remaining attempts.
+   - Participants who fail three times are excluded.
 
 4. **Results**
-   - Displays per‑round allocation outcomes.
-   - Shows how much the allocator kept and how much the recipient received.
-   - Displays the selected part and total received so far.
+   - Allocation assignment occurs here.
+   - Displays a table with:
+     - Round
+     - Allocated (to you)
+     - Kept (by allocator)
+   - Shows total bonus.
 
-5. **Debriefing**
-   - Reuses the same data from `recipient_allocations`.
-   - Displays final bonus summary.
-   - No re‑randomization occurs.
+5. **AI Detection Page (conditional)**
+   - Shown **only** if the Prolific ID equals:
+     ```
+     GeAI12345678900987654321
+     ```
+   - Redirects to a dedicated Prolific completion link.
 
 6. **Thank You / Prolific Redirect**
+   - Standard completion page for all other participants.
 
 ---
 
-## Consistency Guarantees
+## Concurrency and Safety Guarantees
 
-- Allocator selection happens **once** per recipient.
-- Part selection happens **once** per recipient.
-- Results and Debriefing always show identical data.
-- All displayed values correspond exactly to what is stored in the database.
+This app is safe for **simultaneous participants**, provided the following are in place:
+
+- PostgreSQL unique constraint:
+  ```
+  UNIQUE (dictator_prolific_id, round_number)
+  ```
+- Retry logic on insert conflicts.
+- Explicit handling of stale database connections using:
+  ```
+  close_old_connections()
+  connection.ensure_connection()
+  ```
+- `sslmode=require` enforced in `DATABASE_URL`.
+
+These guarantees ensure:
+- No double assignment of rounds.
+- No race conditions under concurrent access.
+- Stable operation on Clever Cloud.
 
 ---
 
-## Development Notes
+## Production Configuration
 
-- The app is robust to incomplete allocator data.
-- It does not require allocators to have completed all rounds.
-- For production use, allocator data quality should be checked in advance.
-- No allocator‑side variables (e.g. `random_payoff_part`) are used here.
-
----
-
-## Dependencies
-
-- PostgreSQL (recommended)
-- oTree
-- Django database access via `django.db.connection`
+- `OTREE_PRODUCTION=1`
+- Gunicorn used as WSGI server:
+  ```
+  gunicorn otree.wsgi:application
+  ```
+- PostgreSQL with SSL enforced.
+- Session size set manually to **80 participants**.
 
 ---
 
 ## Relationship to Allocator App
 
-- This app must be run **after** the allocator app has generated data.
-- It assumes the allocator app stores allocations in `dictator_game_player`.
-- The recipient app never modifies allocator data.
+- This app must be run **after** allocator data has been generated and imported.
+- Allocator data is **never modified**.
+- The recipient app is strictly read‑only with respect to allocator decisions.
 
 ---
 
 ## Intended Use
 
 This app is intended to:
-- Inform recipients about their bonus payments.
-- Ensure transparent and consistent payoff computation.
-- Support experiments where recipients are passive payoff receivers.
+
+- Inform recipients about their bonus outcomes.
+- Guarantee transparent and reproducible payoff calculations.
+- Support large‑scale online experiments with passive payoff recipients.
+- Operate reliably under real‑world, concurrent participant traffic.
+
+---
+
+If you want, I can also:
+- generate a **data‑flow diagram**
+- add a **technical appendix** for reviewers
+- or write a **short participant‑facing description** for Prolific
