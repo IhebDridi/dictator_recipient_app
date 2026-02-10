@@ -132,6 +132,7 @@ class FailedTest(Page):
 # --------------------------------------------------
 # RESULTS
 # --------------------------------------------------
+
 class Results(Page):
 
     def is_displayed(self):
@@ -148,7 +149,9 @@ class Results(Page):
         else:
             recipient_key = self.participant.label
             viewing_other = False
-            already_assigned = self.participant.vars.get('already_assigned', False)
+            already_assigned = self.participant.vars.get(
+                'already_assigned', False
+            )
 
         with connection.cursor() as cursor:
             cursor.execute(
@@ -157,14 +160,14 @@ class Results(Page):
                     r.round_number,
                     r.allocated_value,
                     r.dictator_prolific_id,
-                    d.value,
+                    p.allocation,
                     ROW_NUMBER() OVER (
-                        ORDER BY d.dictator_id, d.round_n
+                        ORDER BY r.dictator_prolific_id, r.round_number
                     ) AS dictator_row_number
                 FROM recipient_allocations r
-                JOIN dictator_values d
-                ON d.dictator_id = r.dictator_prolific_id
-                AND d.round_n = r.round_number
+                JOIN dictator_game_player p
+                  ON p.prolific_id = r.dictator_prolific_id
+                 AND p.round_number = r.round_number
                 WHERE r.recipient_prolific_id = %s
                 ORDER BY r.id
                 """,
@@ -179,9 +182,15 @@ class Results(Page):
                 "received": received,
                 "allocated": 100 - received,
                 "dictator_id": dictator_pid,
-                "dictator_value": dictator_value,
+                "dictator_value": dictator_allocation,
             }
-            for round_n, received, dictator_pid, dictator_value, dictator_row in rows_raw
+            for (
+                round_n,
+                received,
+                dictator_pid,
+                dictator_allocation,
+                dictator_row,
+            ) in rows_raw
         ]
 
         return {
@@ -193,7 +202,6 @@ class Results(Page):
             "already_assigned": already_assigned,
             "viewing_other": viewing_other,
         }
-
 
 # --------------------------------------------------
 # DEBRIEFING
