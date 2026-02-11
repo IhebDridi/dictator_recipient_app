@@ -233,3 +233,7 @@ Round 	Allocated (to you) 	Kept (by the allocator)
 6 	50 	50
 7 	45 	55
 DELETE FROM recipient_allocations;
+
+SELECT COUNT(*)
+FROM dictator_csv_minimal
+WHERE allocation IS NULL;

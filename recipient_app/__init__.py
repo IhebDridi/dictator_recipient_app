@@ -286,56 +286,49 @@ def assign_dictator_rounds_to_recipient(
     if connection.connection is None:
         connection.ensure_connection()
 
-    inserted = 0
-
     with connection.cursor() as cursor:
-        while inserted < x:
-            remaining = x - inserted
-
-            cursor.execute(
-                """
-                WITH picked AS (
-                    SELECT
-                        dictator_id,
-                        round_number,
-                        allocation
-                    FROM dictator_selected_rounds
-                    WHERE (dictator_id, round_number) NOT IN (
-                        SELECT dictator_prolific_id, round_number
-                        FROM recipient_allocations_test
-                    )
-                    ORDER BY RANDOM()
-                    LIMIT %s
-                    FOR UPDATE SKIP LOCKED
-                )
-                INSERT INTO recipient_allocations_test (
-                    recipient_prolific_id,
-                    dictator_prolific_id,
-                    round_number,
-                    allocated_value
-                )
+        cursor.execute(
+            """
+            WITH picked AS (
                 SELECT
-                    %s,
-                    dictator_id,
-                    round_number,
-                    allocation
-                FROM picked
-                """,
-                [remaining, recipient_prolific_id]
+                    drc.id,
+                    drc.round_number,
+                    drc.allocation
+                FROM dictator_rounds_clean drc
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM recipient_allocations_test rat
+                    WHERE rat.dictator_prolific_id = drc.id::text
+                )
+                ORDER BY RANDOM()
+                LIMIT %s
+                FOR UPDATE SKIP LOCKED
             )
-
-            if cursor.rowcount == 0:
-                break
-
-            inserted += cursor.rowcount
-
-    if inserted < x:
-        raise RuntimeError(
-            f"Only {inserted} dictator rounds available, cannot reach {x}"
+            INSERT INTO recipient_allocations_test (
+                recipient_prolific_id,
+                dictator_prolific_id,
+                round_number,
+                allocated_value,
+                assigned_at
+            )
+            SELECT
+                %s,
+                picked.id::text,
+                picked.round_number,
+                picked.allocation,
+                NOW()
+            FROM picked
+            """,
+            [x, recipient_prolific_id]
         )
 
-    return inserted
-        
+        # ✅ hard guarantee
+        if cursor.rowcount != x:
+            raise RuntimeError(
+                f"Only {cursor.rowcount} rounds available, cannot assign {x}"
+            )
+
+
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
     close_old_connections()
