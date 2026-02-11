@@ -290,14 +290,19 @@ page_sequence = [
 def assign_dictator_rounds_to_recipient(
     recipient_prolific_id,
     x=100,
-    max_retries=10,
+    max_retries=50,
 ):
     """
-    Assign up to x unused dictator rounds to a recipient.
-    Each dictator round can be used only once (DB-enforced).
+    Assign exactly x unused dictator rounds to a recipient.
+    Stops only if the global pool is exhausted.
     """
 
+    inserted_total = 0
+
     for _ in range(max_retries):
+        if inserted_total >= x:
+            return inserted_total
+
         close_old_connections()
 
         if connection.connection is None:
@@ -305,7 +310,8 @@ def assign_dictator_rounds_to_recipient(
 
         with connection.cursor() as cursor:
 
-            # ✅ select random dictator rounds
+            remaining = x - inserted_total
+
             cursor.execute(
                 """
                 SELECT
@@ -317,13 +323,14 @@ def assign_dictator_rounds_to_recipient(
                 ORDER BY RANDOM()
                 LIMIT %s
                 """,
-                [x]
+                [remaining]
             )
 
             rows = cursor.fetchall()
 
             if not rows:
-                return 0
+                # pool exhausted
+                return inserted_total
 
             try:
                 cursor.executemany(
@@ -348,15 +355,13 @@ def assign_dictator_rounds_to_recipient(
                     ]
                 )
 
-                return len(rows)
+                inserted_total += len(rows)
 
             except IntegrityError:
-                # ✅ collision → retry
+                # some rows collided → retry loop
                 continue
 
-    return 0
-
-
+    return inserted_total
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
     close_old_connections()

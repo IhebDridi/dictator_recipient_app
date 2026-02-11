@@ -219,6 +219,7 @@ Developped under **OTREE==6.0.10**
 
 ## data reset
 DELETE FROM recipient_allocations;
+DELETE FROM recipient_allocations_test;
 TRUNCATE TABLE recipient_app_player;
 TRUNCATE TABLE otree_participant CASCADE;
 TRUNCATE TABLE otree_session CASCADE;
