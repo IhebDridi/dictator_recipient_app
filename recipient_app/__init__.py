@@ -182,7 +182,16 @@ class Results(Page):
 
     def vars_for_template(self):
 
-        # ✅ Try to reach 100 rounds, but do not block rendering
+        # ✅ GUARANTEED defaults
+        context = {
+            "rows": [],
+            "total_allocated": 0,
+            "total_cents": 0,
+            "total_euros": 0,
+            "remaining_cents": 0,
+        }
+
+        # ✅ Try allocation (may or may not add rows)
         assign_allocations_from_dictator_csv_minimal(
             recipient_prolific_id=self.participant.label,
             x=100,
@@ -190,7 +199,6 @@ class Results(Page):
 
         recipient_key = self.participant.label
 
-        # ✅ Fetch whatever exists (0–100)
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -220,16 +228,19 @@ class Results(Page):
         total_euros = total_cents // 100
         remaining_cents = total_cents % 100
 
-        # ✅ Always set for export
-        self.total_allocated = total_allocated
-
-        return {
+        # ✅ update context
+        context.update({
             "rows": rows,
             "total_allocated": total_allocated,
             "total_cents": total_cents,
             "total_euros": total_euros,
             "remaining_cents": remaining_cents,
-        }
+        })
+
+        # ✅ store for export
+        self.total_allocated = total_allocated
+
+        return context
 
     def before_next_page(self, timeout_happened=False):
         pass
