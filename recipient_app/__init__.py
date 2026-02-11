@@ -349,43 +349,29 @@ def assign_allocations_from_dictator_csv_minimal(
             return True
 
         # --------------------------------------------------
-        # 2) Select usable, unused rounds (CORE CHANGE)
+        # 2) Select usable, unused rounds from NEW table
         # --------------------------------------------------
         cursor.execute(
             """
             SELECT
-                d.participant AS dictator_id,
-                r.round_number,
-                r.allocation
-            FROM dictator_csv_minimal d
-            CROSS JOIN LATERAL (
-                VALUES
-                    (1, allocation_round1),(2, allocation_round2),(3, allocation_round3),(4, allocation_round4),(5, allocation_round5),
-                    (6, allocation_round6),(7, allocation_round7),(8, allocation_round8),(9, allocation_round9),(10, allocation_round10),
-                    (11, allocation_round11),(12, allocation_round12),(13, allocation_round13),(14, allocation_round14),(15, allocation_round15),
-                    (16, allocation_round16),(17, allocation_round17),(18, allocation_round18),(19, allocation_round19),(20, allocation_round20),
-                    (21, allocation_round21),(22, allocation_round22),(23, allocation_round23),(24, allocation_round24),(25, allocation_round25),
-                    (26, allocation_round26),(27, allocation_round27),(28, allocation_round28),(29, allocation_round29),(30, allocation_round30)
-            ) r(round_number, allocation)
+                ds.dictator_prolific_id,
+                ds.round_number,
+                ds.allocation
+            FROM dictator_selected_rounds ds
             WHERE
-                r.allocation IS NOT NULL
-                AND (
-                    (d.random_payoff_part = 1 AND r.round_number BETWEEN 1  AND 10) OR
-                    (d.random_payoff_part = 2 AND r.round_number BETWEEN 11 AND 20) OR
-                    (d.random_payoff_part = 3 AND r.round_number BETWEEN 21 AND 30)
-                )
-                --  no reuse ever
-                AND NOT EXISTS (
+                -- no reuse ever
+                NOT EXISTS (
                     SELECT 1
                     FROM recipient_allocations ra
-                    WHERE ra.dictator_prolific_id = d.participant
-                      AND ra.round_number = r.round_number
+                    WHERE ra.dictator_prolific_id = ds.dictator_prolific_id
+                      AND ra.round_number = ds.round_number
                 )
             ORDER BY RANDOM()
             LIMIT %s
             """,
             [remaining]
         )
+
 
         rows = cursor.fetchall()
 
