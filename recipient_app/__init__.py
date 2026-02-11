@@ -138,13 +138,17 @@ class AIdetectionpage(Page):
 # --------------------------------------------------
 # RESULTS
 # --------------------------------------------------
+
+# --------------------------------------------------
+# RESULTS
+# --------------------------------------------------
 class Results(Page):
 
     def is_displayed(self):
         return self.round_number == 1 and not self.is_excluded
 
     def vars_for_template(self):
-
+        
         recipient_key = self.participant.label
 
         #  ASSIGN HERE (not in before_next_page)
@@ -177,16 +181,37 @@ class Results(Page):
             for i, (round_n, received) in enumerate(rows_raw)
         ]
 
+        # --------------------------------------------------
+        # PAYOFF CALCULATION
+        # --------------------------------------------------
+        # 1) Sum over all rows in ECoins
         total_received = sum(r["received"] for r in rows)
+
+        # 2) Convert to cents
+        total_cents = total_received / 10
+
+        # 3) Convert to euros if needed
+        total_euros = 0
+        remaining_cents = total_cents
+
+        if total_cents >= 100:
+            total_euros = int(total_cents // 100)
+            remaining_cents = total_cents % 100
 
         return {
             "rows": rows,
             "n_rounds": len(rows),
-            "total_received": total_received,
-            "total_cents": total_received / 10,
+
+            # raw payoff units
+            "total_received": total_received,   # ECoins
+            "total_cents": total_cents,          # cents
+
+            # euro conversion
+            "total_euros": total_euros,          # integer euros
+            "remaining_cents": remaining_cents,  # cents after euros
+
             "recipient_prolific_id": recipient_key,
         }
-
 
 # --------------------------------------------------
 # THANK YOU
