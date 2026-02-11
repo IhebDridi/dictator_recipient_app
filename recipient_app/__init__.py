@@ -192,7 +192,7 @@ class Results(Page):
         }
 
         # ✅ Try allocation (may or may not add rows)
-        assign_allocations_from_dictator_csv_minimal(
+        assign_dictator_rounds_to_recipient(
             recipient_prolific_id=self.participant.label,
             x=100,
         )
@@ -287,15 +287,14 @@ page_sequence = [
 # ALLOCATION ASSIGNMENT (SAFE)
 # --------------------------------------------------
 
-def assign_allocations_from_dictator_csv_minimal(
+def assign_dictator_rounds_to_recipient(
     recipient_prolific_id,
     x=100,
-    max_retries=20,
+    max_retries=10,
 ):
     """
-    Assign up to x dictator rounds to a recipient.
-    Guarantees reaching x if enough data exist.
-    No ZERO_FILL rows inserted.
+    Assign up to x unused dictator rounds to a recipient.
+    Each dictator round can be used only once (DB-enforced).
     """
 
     for _ in range(max_retries):
@@ -306,27 +305,7 @@ def assign_allocations_from_dictator_csv_minimal(
 
         with connection.cursor() as cursor:
 
-            # --------------------------------------------------
-            # how many allocations already exist?
-            # --------------------------------------------------
-            cursor.execute(
-                """
-                SELECT COUNT(*)
-                FROM recipient_allocations_test
-                WHERE recipient_prolific_id = %s
-                """,
-                [recipient_prolific_id]
-            )
-            already_assigned = cursor.fetchone()[0]
-
-            if already_assigned >= x:
-                return True
-
-            remaining = x - already_assigned
-
-            # --------------------------------------------------
-            # select unused dictator rounds
-            # --------------------------------------------------
+            # ✅ select random dictator rounds
             cursor.execute(
                 """
                 SELECT
@@ -338,16 +317,13 @@ def assign_allocations_from_dictator_csv_minimal(
                 ORDER BY RANDOM()
                 LIMIT %s
                 """,
-                [remaining]
+                [x]
             )
 
             rows = cursor.fetchall()
 
-            # --------------------------------------------------
-            # no data left → exhausted
-            # --------------------------------------------------
             if not rows:
-                return False
+                return 0
 
             try:
                 cursor.executemany(
@@ -372,24 +348,14 @@ def assign_allocations_from_dictator_csv_minimal(
                     ]
                 )
 
-                # ✅ loop again to check count
-                continue
+                return len(rows)
 
             except IntegrityError:
-                # another participant took some rows → retry
+                # ✅ collision → retry
                 continue
 
-    # final defensive check
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM recipient_allocations_test
-            WHERE recipient_prolific_id = %s
-            """,
-            [recipient_prolific_id]
-        )
-        return cursor.fetchone()[0] >= x
+    return 0
+
 
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
