@@ -256,11 +256,12 @@ def assign_allocations_from_dictator_csv_minimal(
                     dsr.round_number,
                     dsr.allocation
                 FROM dictator_selected_rounds dsr
-                WHERE NOT EXISTS (
+                WHERE dsr.allocation IS NOT NULL
+                AND NOT EXISTS (
                     SELECT 1
                     FROM recipient_allocations ra
                     WHERE ra.dictator_prolific_id = dsr.dictator_id
-                      AND ra.round_number = dsr.round_number
+                        AND ra.round_number = dsr.round_number
                 )
                 ORDER BY RANDOM()
                 LIMIT %s
