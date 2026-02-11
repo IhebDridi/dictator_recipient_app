@@ -180,7 +180,7 @@ class Results(Page):
             and not self.participant.vars.get('ai_detected', False)
             and not self.participant.vars.get('exhausted', False)
         )
-    def before_next_page(self):
+    def before_next_page(self,timeout_happened=False):
         assign_allocations_from_dictator_csv_minimal(
             recipient_prolific_id=self.participant.label,
             x=100,
