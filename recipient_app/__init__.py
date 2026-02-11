@@ -40,7 +40,7 @@ class Group(BaseGroup):
 class Player(BasePlayer):
     delete_recipient_id = models.StringField(blank=True)  # to delete recipient info in deubg mode
     view_recipient_id = models.StringField(blank=True)    # to view recipient info in deubg mode
-
+    
     prolific_id = models.StringField(blank=False, label="Please enter your Prolific ID")
 
     q1 = models.StringField(choices=['a', 'b', 'c', 'd'], blank=True)
@@ -51,6 +51,7 @@ class Player(BasePlayer):
     is_excluded = models.BooleanField(initial=False)
     
     total_allocated = models.IntegerField(
+        initial=0,
         doc="Sum of all allocations received (raw units)"
     )
 
@@ -179,16 +180,17 @@ class Results(Page):
             and not self.participant.vars.get('ai_detected', False)
             and not self.participant.vars.get('exhausted', False)
         )
+    def before_next_page(self):
+        assign_allocations_from_dictator_csv_minimal(
+            recipient_prolific_id=self.participant.label,
+            x=100,
+        )
 
     def vars_for_template(self):
 
         recipient_key = self.participant.label
 
-        # ✅ Assign allocations (allocation = amount given to recipient)
-        success = assign_allocations_from_dictator_csv_minimal(
-            recipient_prolific_id=recipient_key,
-            x=100,
-        )
+
 
         #if not success:
             #self.participant.vars['exhausted'] = True
@@ -320,20 +322,14 @@ def assign_allocations_from_dictator_csv_minimal(
             # --------------------------------------------------
             cursor.execute(
                 """
-                SELECT
-                    dsr.dictator_id,
-                    dsr.round_number,
-                    dsr.allocation
-                FROM dictator_selected_rounds dsr
-                WHERE dsr.allocation IS NOT NULL
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM recipient_allocations_test ra
-                      WHERE ra.dictator_prolific_id = dsr.dictator_id
-                        AND ra.round_number = dsr.round_number
-                  )
-                ORDER BY RANDOM()
-                LIMIT %s
+                    SELECT
+                        dsr.dictator_id,
+                        dsr.round_number,
+                        dsr.allocation
+                    FROM dictator_selected_rounds dsr
+                    WHERE dsr.allocation IS NOT NULL
+                    ORDER BY RANDOM()
+                    LIMIT %s
                 """,
                 [remaining]
             )
@@ -344,7 +340,8 @@ def assign_allocations_from_dictator_csv_minimal(
             # if there are no usable rounds left, stop gracefully
             # --------------------------------------------------
             if not rows:
-                return True
+                self.participant.vars['exhausted'] = True
+                return False
 
             try:
                 cursor.executemany(
