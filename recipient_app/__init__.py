@@ -178,25 +178,19 @@ class Results(Page):
             self.round_number == 1
             and not self.is_excluded
             and not self.participant.vars.get('ai_detected', False)
-            and not self.participant.vars.get('exhausted', False)
         )
 
     def vars_for_template(self):
 
-        # ✅ ASSIGN ALLOCATIONS FIRST (Playwright-safe)
-        success = assign_allocations_from_dictator_csv_minimal(
+        # ✅ Try to reach 100 rounds, but do not block rendering
+        assign_allocations_from_dictator_csv_minimal(
             recipient_prolific_id=self.participant.label,
             x=100,
         )
 
-        # ✅ handle exhaustion safely
-        if not success:
-            self.participant.vars['exhausted'] = True
-            return {}
-
         recipient_key = self.participant.label
 
-        # ✅ Fetch allocations for this recipient
+        # ✅ Fetch whatever exists (0–100)
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -211,7 +205,6 @@ class Results(Page):
             )
             rows_raw = cursor.fetchall()
 
-        # ✅ Build rows for display
         rows = [
             {
                 "round": i + 1,
@@ -227,7 +220,7 @@ class Results(Page):
         total_euros = total_cents // 100
         remaining_cents = total_cents % 100
 
-        # ✅ store for export
+        # ✅ Always set for export
         self.total_allocated = total_allocated
 
         return {
@@ -239,7 +232,6 @@ class Results(Page):
         }
 
     def before_next_page(self, timeout_happened=False):
-        # ✅ keep method (intentionally empty)
         pass
 
 # --------------------------------------------------
