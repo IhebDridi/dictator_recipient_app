@@ -180,21 +180,21 @@ class Results(Page):
             and not self.participant.vars.get('ai_detected', False)
             and not self.participant.vars.get('exhausted', False)
         )
-    def before_next_page(self,timeout_happened=False):
-        assign_allocations_from_dictator_csv_minimal(
+
+    def vars_for_template(self):
+
+        # ✅ ASSIGN ALLOCATIONS FIRST (Playwright-safe)
+        success = assign_allocations_from_dictator_csv_minimal(
             recipient_prolific_id=self.participant.label,
             x=100,
         )
 
-    def vars_for_template(self):
+        # ✅ handle exhaustion safely
+        if not success:
+            self.participant.vars['exhausted'] = True
+            return {}
 
         recipient_key = self.participant.label
-
-
-
-        #if not success:
-            #self.participant.vars['exhausted'] = True
-            #return {}
 
         # ✅ Fetch allocations for this recipient
         with connection.cursor() as cursor:
@@ -227,6 +227,7 @@ class Results(Page):
         total_euros = total_cents // 100
         remaining_cents = total_cents % 100
 
+        # ✅ store for export
         self.total_allocated = total_allocated
 
         return {
@@ -237,6 +238,9 @@ class Results(Page):
             "remaining_cents": remaining_cents,
         }
 
+    def before_next_page(self, timeout_happened=False):
+        # ✅ keep method (intentionally empty)
+        pass
 
 # --------------------------------------------------
 # THANK YOU
@@ -340,7 +344,6 @@ def assign_allocations_from_dictator_csv_minimal(
             # if there are no usable rounds left, stop gracefully
             # --------------------------------------------------
             if not rows:
-                self.participant.vars['exhausted'] = True
                 return False
 
             try:
