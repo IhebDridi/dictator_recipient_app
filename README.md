@@ -218,7 +218,7 @@ This app is intended to:
 Developped under **OTREE==6.0.10**
 
 ## data reset
-DELETE FROM recipient_allocations;
+
 DELETE FROM recipient_allocations_test;
 TRUNCATE TABLE recipient_app_player;
 TRUNCATE TABLE otree_participant CASCADE;
@@ -232,3 +232,4 @@ Round 	Allocated (to you) 	Kept (by the allocator)
 5 	30 	70
 6 	50 	50
 7 	45 	55
+DELETE FROM recipient_allocations;
