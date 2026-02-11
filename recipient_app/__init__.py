@@ -76,9 +76,9 @@ class InformedConsent(Page):
         self.participant.vars['already_assigned'] = already_assigned
 
         # If YES → do nothing else
-        if already_assigned:
-            self.participant.vars['exhausted'] = False
-            return
+        #if already_assigned:
+            #self.participant.vars['exhausted'] = False
+            #return
 
 
 # --------------------------------------------------
@@ -191,9 +191,9 @@ class Results(Page):
             x=100,
         )
 
-        if not success:
-            self.participant.vars['exhausted'] = True
-            return {}
+        #if not success:
+            #self.participant.vars['exhausted'] = True
+            #return {}
 
         # ✅ Fetch allocations for this recipient
         with connection.cursor() as cursor:
@@ -247,7 +247,7 @@ class ThankYou(Page):
 
 class Exhausted(Page):
     def is_displayed(self):
-        return self.participant.vars.get('exhausted', False)
+        return False
 
 
 # --------------------------------------------------
