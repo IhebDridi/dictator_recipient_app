@@ -9,6 +9,7 @@ if not settings.configured:
 
 from otree.api import *
 from django.db import connection
+import math
 
 from django.db import close_old_connections
 
@@ -191,9 +192,8 @@ class Results(Page):
         # 1) Sum over all rows in ECoins
         total_received = sum(r["received"] for r in rows)
 
-        # 2) Convert ECoins to cents (integer-safe)
-        #    10 ECoins = 1 cent
-        total_cents = total_received // 10
+        # 2) Convert ECoins to cents (ALWAYS round up)
+        total_cents = math.ceil(total_received / 10)
 
         # 3) Convert cents to euros
         total_euros = total_cents // 100

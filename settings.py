@@ -31,7 +31,7 @@ SESSION_CONFIGS = [
     dict(
         name='recipient_session',
         display_name='Recipients',
-        num_demo_participants=10,
+        num_demo_participants=200,
         app_sequence=['recipient_app'],
     ),
     # dict(
