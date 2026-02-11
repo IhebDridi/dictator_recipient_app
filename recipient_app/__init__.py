@@ -142,6 +142,10 @@ class AIdetectionpage(Page):
 # --------------------------------------------------
 # RESULTS
 # --------------------------------------------------
+
+# --------------------------------------------------
+# RESULTS
+# --------------------------------------------------
 class Results(Page):
 
     def is_displayed(self):
@@ -187,16 +191,13 @@ class Results(Page):
         # 1) Sum over all rows in ECoins
         total_received = sum(r["received"] for r in rows)
 
-        # 2) Convert to cents
-        total_cents = total_received / 10
+        # 2) Convert ECoins to cents (integer-safe)
+        #    10 ECoins = 1 cent
+        total_cents = total_received // 10
 
-        # 3) Convert to euros if needed
-        total_euros = 0
-        remaining_cents = total_cents
-
-        if total_cents >= 100:
-            total_euros = int(total_cents // 100)
-            remaining_cents = total_cents % 100
+        # 3) Convert cents to euros
+        total_euros = total_cents // 100
+        remaining_cents = total_cents % 100
 
         return {
             "rows": rows,
@@ -204,14 +205,15 @@ class Results(Page):
 
             # raw payoff units
             "total_received": total_received,   # ECoins
-            "total_cents": total_cents,          # cents
+            "total_cents": total_cents,          # cents (integer)
 
             # euro conversion
-            "total_euros": total_euros,          # integer euros
-            "remaining_cents": remaining_cents,  # cents after euros
+            "total_euros": total_euros,          # euros (integer)
+            "remaining_cents": remaining_cents,  # remaining cents (integer)
 
             "recipient_prolific_id": recipient_key,
         }
+
 
 # --------------------------------------------------
 # THANK YOU
