@@ -290,78 +290,40 @@ page_sequence = [
 def assign_dictator_rounds_to_recipient(
     recipient_prolific_id,
     x=100,
-    max_retries=50,
 ):
-    """
-    Assign exactly x unused dictator rounds to a recipient.
-    Stops only if the global pool is exhausted.
-    """
+    close_old_connections()
+    if connection.connection is None:
+        connection.ensure_connection()
 
-    inserted_total = 0
-
-    for _ in range(max_retries):
-        if inserted_total >= x:
-            return inserted_total
-
-        close_old_connections()
-
-        if connection.connection is None:
-            connection.ensure_connection()
-
-        with connection.cursor() as cursor:
-
-            remaining = x - inserted_total
-
-            cursor.execute(
-                """
-                SELECT
-                    dsr.dictator_id,
-                    dsr.round_number,
-                    dsr.allocation
-                FROM dictator_selected_rounds dsr
-                WHERE dsr.allocation IS NOT NULL
-                ORDER BY RANDOM()
-                LIMIT %s
-                """,
-                [remaining]
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO recipient_allocations_test (
+                recipient_prolific_id,
+                dictator_prolific_id,
+                round_number,
+                allocated_value
             )
+            SELECT
+                %s,
+                dsr.dictator_id,
+                dsr.round_number,
+                dsr.allocation
+            FROM dictator_selected_rounds dsr
+            WHERE dsr.allocation IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM recipient_allocations_test rat
+                  WHERE rat.dictator_prolific_id = dsr.dictator_id
+                    AND rat.round_number = dsr.round_number
+              )
+            ORDER BY RANDOM()
+            LIMIT %s
+            """,
+            [recipient_prolific_id, x]
+        )
 
-            rows = cursor.fetchall()
-
-            if not rows:
-                # pool exhausted
-                return inserted_total
-
-            try:
-                cursor.executemany(
-                    """
-                    INSERT INTO recipient_allocations_test
-                    (
-                        recipient_prolific_id,
-                        dictator_prolific_id,
-                        round_number,
-                        allocated_value
-                    )
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    [
-                        (
-                            recipient_prolific_id,
-                            dictator_id,
-                            round_number,
-                            int(allocation),
-                        )
-                        for dictator_id, round_number, allocation in rows
-                    ]
-                )
-
-                inserted_total += len(rows)
-
-            except IntegrityError:
-                # some rows collided → retry loop
-                continue
-
-    return inserted_total
+        return cursor.rowcount
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
     close_old_connections()
