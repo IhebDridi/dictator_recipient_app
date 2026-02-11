@@ -281,55 +281,33 @@ page_sequence = [
 def assign_dictator_rounds_to_recipient(
     recipient_prolific_id,
     x=100,
-    max_loops=20,
 ):
-    inserted = 0
+    close_old_connections()
 
-    for _ in range(max_loops):
-        if inserted >= x:
-            break
+    if connection.connection is None:
+        connection.ensure_connection()
 
-        close_old_connections()
-        if connection.connection is None:
-            connection.ensure_connection()
-
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO recipient_allocations_test (
-                    recipient_prolific_id,
-                    dictator_prolific_id,
-                    round_number,
-                    allocated_value
-                )
-                SELECT
-                    %s,
-                    dsr.dictator_id,
-                    dsr.round_number,
-                    dsr.allocation
-                FROM (
-                    SELECT DISTINCT ON (dictator_id, round_number)
-                        dictator_id,
-                        round_number,
-                        allocation
-                    FROM dictator_selected_rounds
-                    WHERE allocation IS NOT NULL
-                    ORDER BY dictator_id, round_number
-                ) dsr
-                ORDER BY RANDOM()
-                LIMIT %s
-                ON CONFLICT (dictator_prolific_id, round_number) DO NOTHING
-                """,
-                [recipient_prolific_id, x - inserted]
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO recipient_allocations_test (
+                recipient_prolific_id,
+                dictator_prolific_id,
+                round_number,
+                allocated_value
             )
-
-            if cursor.rowcount == 0:
-                break
-
-            inserted += cursor.rowcount
-
-    return inserted
-
+            SELECT
+                %s,
+                dictator_id,
+                round_number,
+                allocation
+            FROM dictator_selected_rounds
+            ORDER BY RANDOM()
+            LIMIT %s
+            """,
+            [recipient_prolific_id, x]
+        )
+        
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
     close_old_connections()
