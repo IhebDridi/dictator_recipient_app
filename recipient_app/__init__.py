@@ -287,12 +287,12 @@ page_sequence = [
 def assign_allocations_from_dictator_csv_minimal(
     recipient_prolific_id,
     x=100,
-    max_retries=5,
+    max_retries=20,
 ):
     """
     Assign up to x dictator rounds to a recipient.
-    Uses only real dictator data.
-    No ZERO_FILL rows are inserted.
+    Guarantees reaching x if enough data exist.
+    No ZERO_FILL rows inserted.
     """
 
     for _ in range(max_retries):
@@ -304,7 +304,7 @@ def assign_allocations_from_dictator_csv_minimal(
         with connection.cursor() as cursor:
 
             # --------------------------------------------------
-            # how many allocations already exist for this recipient?
+            # how many allocations already exist?
             # --------------------------------------------------
             cursor.execute(
                 """
@@ -315,25 +315,25 @@ def assign_allocations_from_dictator_csv_minimal(
                 [recipient_prolific_id]
             )
             already_assigned = cursor.fetchone()[0]
-            remaining = x - already_assigned
 
-            # nothing left to assign
-            if remaining <= 0:
+            if already_assigned >= x:
                 return True
+
+            remaining = x - already_assigned
 
             # --------------------------------------------------
             # select unused dictator rounds
             # --------------------------------------------------
             cursor.execute(
                 """
-                    SELECT
-                        dsr.dictator_id,
-                        dsr.round_number,
-                        dsr.allocation
-                    FROM dictator_selected_rounds dsr
-                    WHERE dsr.allocation IS NOT NULL
-                    ORDER BY RANDOM()
-                    LIMIT %s
+                SELECT
+                    dsr.dictator_id,
+                    dsr.round_number,
+                    dsr.allocation
+                FROM dictator_selected_rounds dsr
+                WHERE dsr.allocation IS NOT NULL
+                ORDER BY RANDOM()
+                LIMIT %s
                 """,
                 [remaining]
             )
@@ -341,7 +341,7 @@ def assign_allocations_from_dictator_csv_minimal(
             rows = cursor.fetchall()
 
             # --------------------------------------------------
-            # if there are no usable rounds left, stop gracefully
+            # no data left → exhausted
             # --------------------------------------------------
             if not rows:
                 return False
@@ -350,10 +350,12 @@ def assign_allocations_from_dictator_csv_minimal(
                 cursor.executemany(
                     """
                     INSERT INTO recipient_allocations_test
-                    (recipient_prolific_id,
-                     dictator_prolific_id,
-                     round_number,
-                     allocated_value)
+                    (
+                        recipient_prolific_id,
+                        dictator_prolific_id,
+                        round_number,
+                        allocated_value
+                    )
                     VALUES (%s, %s, %s, %s)
                     """,
                     [
@@ -361,19 +363,30 @@ def assign_allocations_from_dictator_csv_minimal(
                             recipient_prolific_id,
                             dictator_id,
                             round_number,
-                            int(allocation),  # allocation = amount given to recipient
+                            int(allocation),
                         )
                         for dictator_id, round_number, allocation in rows
                     ]
                 )
-                return True
 
-            except IntegrityError:
-                # another participant took some rounds → retry
+                # ✅ loop again to check count
                 continue
 
-    return True
+            except IntegrityError:
+                # another participant took some rows → retry
+                continue
 
+    # final defensive check
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM recipient_allocations_test
+            WHERE recipient_prolific_id = %s
+            """,
+            [recipient_prolific_id]
+        )
+        return cursor.fetchone()[0] >= x
 
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
