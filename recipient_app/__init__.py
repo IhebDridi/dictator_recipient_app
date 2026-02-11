@@ -201,7 +201,7 @@ class Results(Page):
                 SELECT
                     round_number,
                     allocated_value
-                FROM recipient_allocations
+                FROM recipient_allocations_test
                 WHERE recipient_prolific_id = %s
                 ORDER BY round_number
                 """,
@@ -277,23 +277,33 @@ page_sequence = [
 # --------------------------------------------------
 # ALLOCATION ASSIGNMENT (SAFE)
 # --------------------------------------------------
+
 def assign_allocations_from_dictator_csv_minimal(
     recipient_prolific_id,
     x=100,
     max_retries=5,
 ):
+    """
+    Assign up to x dictator rounds to a recipient.
+    Uses only real dictator data.
+    No ZERO_FILL rows are inserted.
+    """
+
     for _ in range(max_retries):
         close_old_connections()
+
         if connection.connection is None:
             connection.ensure_connection()
 
         with connection.cursor() as cursor:
 
-            # how many already assigned?
+            # --------------------------------------------------
+            # how many allocations already exist for this recipient?
+            # --------------------------------------------------
             cursor.execute(
                 """
                 SELECT COUNT(*)
-                FROM recipient_allocations
+                FROM recipient_allocations_test
                 WHERE recipient_prolific_id = %s
                 """,
                 [recipient_prolific_id]
@@ -301,10 +311,13 @@ def assign_allocations_from_dictator_csv_minimal(
             already_assigned = cursor.fetchone()[0]
             remaining = x - already_assigned
 
+            # nothing left to assign
             if remaining <= 0:
                 return True
 
-            # select unused rounds
+            # --------------------------------------------------
+            # select unused dictator rounds
+            # --------------------------------------------------
             cursor.execute(
                 """
                 SELECT
@@ -315,7 +328,7 @@ def assign_allocations_from_dictator_csv_minimal(
                 WHERE dsr.allocation IS NOT NULL
                   AND NOT EXISTS (
                       SELECT 1
-                      FROM recipient_allocations ra
+                      FROM recipient_allocations_test ra
                       WHERE ra.dictator_prolific_id = dsr.dictator_id
                         AND ra.round_number = dsr.round_number
                   )
@@ -327,39 +340,16 @@ def assign_allocations_from_dictator_csv_minimal(
 
             rows = cursor.fetchall()
 
-            # 3) If not enough real allocations, fill the rest with zeros
-            missing = remaining - len(rows)
-
-            if missing > 0:
-                # insert zero rounds (no dictator, no real round_number)
-                zero_rows = [
-                    (
-                        recipient_prolific_id,
-                        'ZERO_FILL',
-                        -i - 1,
-                        None,
-                        0
-                    )
-                    for i in range(missing)
-                ]
-
-                cursor.executemany(
-                    """
-                    INSERT INTO recipient_allocations
-                    (recipient_prolific_id,
-                     dictator_prolific_id,
-                     round_number,
-                     part,
-                     allocated_value)
-                    VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    zero_rows
-                )
+            # --------------------------------------------------
+            # if there are no usable rounds left, stop gracefully
+            # --------------------------------------------------
+            if not rows:
+                return True
 
             try:
                 cursor.executemany(
                     """
-                    INSERT INTO recipient_allocations
+                    INSERT INTO recipient_allocations_test
                     (recipient_prolific_id,
                      dictator_prolific_id,
                      round_number,
@@ -371,7 +361,7 @@ def assign_allocations_from_dictator_csv_minimal(
                             recipient_prolific_id,
                             dictator_id,
                             round_number,
-                            int(allocation),
+                            int(allocation),  # allocation = amount given to recipient
                         )
                         for dictator_id, round_number, allocation in rows
                     ]
@@ -397,7 +387,7 @@ def recipient_has_allocations(recipient_prolific_id):
         cursor.execute(
             """
             SELECT 1
-            FROM recipient_allocations
+            FROM recipient_allocations_test
             WHERE recipient_prolific_id = %s
             LIMIT 1
             """,
