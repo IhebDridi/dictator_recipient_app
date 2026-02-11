@@ -48,6 +48,10 @@ class Player(BasePlayer):
 
     comprehension_attempts = models.IntegerField(initial=0)
     is_excluded = models.BooleanField(initial=False)
+    
+    total_allocated = models.IntegerField(
+        doc="Sum of all allocations received (raw units)"
+    )
 
 
 # --------------------------------------------------
@@ -90,12 +94,15 @@ class Introduction(Page):
 # --------------------------------------------------
 # COMPREHENSION TEST
 # --------------------------------------------------
+
+
+
 class ComprehensionTest(Page):
     form_model = 'player'
     form_fields = ['q1', 'q2', 'q3']
 
     def is_displayed(self):
-        return not self.is_excluded and self.round_number == 1
+        return self.round_number == 1 and not self.is_excluded
 
     def vars_for_template(self):
         return {
@@ -109,30 +116,36 @@ class ComprehensionTest(Page):
             "q3": "b",
         }
 
+        # ❌ wrong OR unanswered
         wrong = [
             q for q, ans in correct.items()
-            if values.get(q) != ans or not values.get(q)
+            if values.get(q) != ans
         ]
 
-        if wrong:
-            self.comprehension_attempts += 1
-            remaining = 3 - self.comprehension_attempts
+        # ✅ passed
+        if not wrong:
+            self.participant.vars.pop("comp_error_message", None)
+            return None
 
-            if remaining <= 0:
-                # ✅ FAIL: mark excluded but DO NOT block page advance
-                self.is_excluded = True
-                self.participant.vars["failed_comp"] = True
+        # ❌ failed attempt
+        self.comprehension_attempts += 1
+        remaining = 3 - self.comprehension_attempts
 
-                # ✅ clear error so the page advances
-                return None
+        # ✅ final failure → advance to FailedTest
+        if remaining <= 0:
+            self.is_excluded = True
+            self.participant.vars["failed_comp"] = True
+            self.participant.vars.pop("comp_error_message", None)
+            return None
 
-            else:
-                msg = (
-                    f"You failed questions {', '.join(wrong)}. "
-                    f"You now only have {remaining} more attempts."
-                )
-                self.participant.vars["comp_error_message"] = msg
-                return msg
+        # ✅ manual message shown in template
+        self.participant.vars["comp_error_message"] = (
+            f"You failed questions {', '.join(wrong)}. "
+            f"You now only have {remaining} more attempts."
+        )
+
+        # ✅ block page, force re-render, hide oTree text via CSS
+        return " "
 
 # --------------------------------------------------
 # FAILED TEST
@@ -156,77 +169,40 @@ class AIdetectionpage(Page):
 # --------------------------------------------------
 # RESULTS
 # --------------------------------------------------
+
 class Results(Page):
 
-    def is_displayed(self):
-        return (
-            self.round_number == 1
-            and not self.is_excluded
-            and not self.participant.vars.get('ai_detected', False)
-        )
-
     def vars_for_template(self):
-
         recipient_key = self.participant.label
 
-        #  ASSIGN HERE (not in before_next_page)
         success = assign_allocations_from_dictator_csv_minimal(
             recipient_prolific_id=recipient_key,
             x=100,
         )
-        self.participant.vars['exhausted'] = False
+
+        if not success:
+            self.participant.vars['exhausted'] = True
+            return {}
 
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT
-                    round_number,
-                    allocated_value
+                SELECT allocated_value
                 FROM recipient_allocations
                 WHERE recipient_prolific_id = %s
-                ORDER BY round_number
                 """,
                 [recipient_key]
             )
             rows_raw = cursor.fetchall()
 
-        rows = [
-            {
-                "round": i + 1,
-                "received": received,
-                "kept": 100 - received,
-            }
-            for i, (round_n, received) in enumerate(rows_raw)
-        ]
+        # ✅ compute sum (RAW bonus units)
+        total_allocated = sum(v[0] for v in rows_raw)
 
-        # --------------------------------------------------
-        # PAYOFF CALCULATION
-        # --------------------------------------------------
-        import math
-
-        # 1) Sum over all rows in ECoins
-        total_received = sum(r["received"] for r in rows)
-
-        # 2) Convert ECoins to cents (ALWAYS round up)
-        total_cents = math.ceil(total_received / 10)
-
-        # 3) Convert cents to euros
-        total_euros = total_cents // 100
-        remaining_cents = total_cents % 100
+        # ✅ SAVE TO PLAYER (this is the key line)
+        self.total_allocated = total_allocated
 
         return {
-            "rows": rows,
-            "n_rounds": len(rows),
-
-            # raw payoff units
-            "total_received": total_received,   # ECoins
-            "total_cents": total_cents,          # cents
-
-            # euro conversion
-            "total_euros": total_euros,
-            "remaining_cents": remaining_cents,
-
-            "recipient_prolific_id": recipient_key,
+            "total_allocated": total_allocated,
         }
 
 
@@ -247,12 +223,12 @@ class Exhausted(Page):
 # PAGE SEQUENCE
 # --------------------------------------------------
 page_sequence = [
-
+    ComprehensionTest,
+    FailedTest,
     InformedConsent,
     AIdetectionpage,
     Introduction,
-    ComprehensionTest,
-    FailedTest,
+
     Results,
     ThankYou,
     #Instructions, #not this one
@@ -361,7 +337,7 @@ def assign_allocations_from_dictator_csv_minimal(
                             recipient_prolific_id,
                             dictator_id,
                             round_number,
-                            int(100 - allocation),
+                            int(allocation),
                         )
                         for dictator_id, round_number, allocation in rows
                     ]
