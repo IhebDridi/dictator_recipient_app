@@ -172,9 +172,19 @@ class AIdetectionpage(Page):
 
 class Results(Page):
 
+    def is_displayed(self):
+        return (
+            self.round_number == 1
+            and not self.is_excluded
+            and not self.participant.vars.get('ai_detected', False)
+            and not self.participant.vars.get('exhausted', False)
+        )
+
     def vars_for_template(self):
+
         recipient_key = self.participant.label
 
+        # ✅ assign allocations (allocation = amount given to recipient)
         success = assign_allocations_from_dictator_csv_minimal(
             recipient_prolific_id=recipient_key,
             x=100,
@@ -184,27 +194,46 @@ class Results(Page):
             self.participant.vars['exhausted'] = True
             return {}
 
+        # ✅ fetch allocations for this recipient
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT allocated_value
+                SELECT
+                    round_number,
+                    allocated_value
                 FROM recipient_allocations
                 WHERE recipient_prolific_id = %s
+                ORDER BY round_number
                 """,
                 [recipient_key]
             )
             rows_raw = cursor.fetchall()
 
-        # ✅ compute sum (RAW bonus units)
-        total_allocated = sum(v[0] for v in rows_raw)
+        # ✅ build table rows for template
+        rows = [
+            {
+                "round": i + 1,
+                "received": allocated_value,
+                "kept": 100 - allocated_value,
+            }
+            for i, (round_n, allocated_value) in enumerate(rows_raw)
+        ]
 
-        # ✅ SAVE TO PLAYER (this is the key line)
+        # ✅ IMPORTANT: compute and STORE bonus (raw units)
+        total_allocated = sum(r["received"] for r in rows)
+
+        # ✅ SAVE TO PLAYER (exported in Per‑app CSV)
         self.total_allocated = total_allocated
 
         return {
-            "total_allocated": total_allocated,
-        }
+            "rows": rows,
+            "n_rounds": len(rows),
 
+            # ✅ raw bonus only (no conversion)
+            "total_allocated": total_allocated,
+
+            "recipient_prolific_id": recipient_key,
+        }
 
 # --------------------------------------------------
 # THANK YOU
