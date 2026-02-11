@@ -61,6 +61,8 @@ class Player(BasePlayer):
 class InformedConsent(Page):
     form_model = 'player'
     form_fields = ['prolific_id']
+    def is_displayed(self):
+        return self.round_number == 1
 
     def before_next_page(self, timeout_happened=False):
         pid = self.prolific_id.strip()
@@ -242,7 +244,11 @@ class Results(Page):
 # --------------------------------------------------
 class ThankYou(Page):
     def is_displayed(self):
-        return self.round_number == 1
+        return (
+            self.round_number == 1
+            and not self.participant.vars.get('ai_detected', False)
+            and not self.is_excluded
+        )
 
 
 class Exhausted(Page):
