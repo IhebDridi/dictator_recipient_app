@@ -11,6 +11,7 @@ from otree.api import *
 from django.db import connection
 from django.db import close_old_connections, IntegrityError
 import random
+import math
 
 close_old_connections()
 
@@ -184,7 +185,7 @@ class Results(Page):
 
         recipient_key = self.participant.label
 
-        # ✅ assign allocations (allocation = amount given to recipient)
+        # ✅ Assign allocations (allocation = amount given to recipient)
         success = assign_allocations_from_dictator_csv_minimal(
             recipient_prolific_id=recipient_key,
             x=100,
@@ -194,7 +195,7 @@ class Results(Page):
             self.participant.vars['exhausted'] = True
             return {}
 
-        # ✅ fetch allocations for this recipient
+        # ✅ Fetch allocations for this recipient
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -209,31 +210,29 @@ class Results(Page):
             )
             rows_raw = cursor.fetchall()
 
-        # ✅ build table rows for template
+        # ✅ Build rows for display
         rows = [
             {
                 "round": i + 1,
                 "received": allocated_value,
                 "kept": 100 - allocated_value,
             }
-            for i, (round_n, allocated_value) in enumerate(rows_raw)
+            for i, (round_number, allocated_value) in enumerate(rows_raw)
         ]
 
-        # ✅ IMPORTANT: compute and STORE bonus (raw units)
+        # ✅ Compute TOTAL BONUS (raw units)
         total_allocated = sum(r["received"] for r in rows)
 
-        # ✅ SAVE TO PLAYER (exported in Per‑app CSV)
+        # ✅ SAVE bonus PER RECIPIENT (exported in Per‑app CSV)
         self.total_allocated = total_allocated
 
         return {
             "rows": rows,
             "n_rounds": len(rows),
-
-            # ✅ raw bonus only (no conversion)
             "total_allocated": total_allocated,
-
             "recipient_prolific_id": recipient_key,
         }
+
 
 # --------------------------------------------------
 # THANK YOU
