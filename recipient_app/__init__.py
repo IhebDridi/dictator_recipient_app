@@ -220,17 +220,20 @@ class Results(Page):
             for i, (round_number, allocated_value) in enumerate(rows_raw)
         ]
 
-        # ✅ Compute TOTAL BONUS (raw units)
         total_allocated = sum(r["received"] for r in rows)
 
-        # ✅ SAVE bonus PER RECIPIENT (exported in Per‑app CSV)
+        total_cents = math.ceil(total_allocated / 10)
+        total_euros = total_cents // 100
+        remaining_cents = total_cents % 100
+
         self.total_allocated = total_allocated
 
         return {
             "rows": rows,
-            "n_rounds": len(rows),
             "total_allocated": total_allocated,
-            "recipient_prolific_id": recipient_key,
+            "total_cents": total_cents,
+            "total_euros": total_euros,
+            "remaining_cents": remaining_cents,
         }
 
 
