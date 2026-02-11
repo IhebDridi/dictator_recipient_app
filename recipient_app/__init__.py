@@ -252,12 +252,12 @@ class Exhausted(Page):
 # PAGE SEQUENCE
 # --------------------------------------------------
 page_sequence = [
-    ComprehensionTest,
-    FailedTest,
+
     InformedConsent,
     AIdetectionpage,
     Introduction,
-
+    ComprehensionTest,
+    FailedTest,
     Results,
     ThankYou,
     #Instructions, #not this one
