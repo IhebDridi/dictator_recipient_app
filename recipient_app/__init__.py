@@ -43,9 +43,9 @@ class Player(BasePlayer):
 
     prolific_id = models.StringField(blank=False, label="Please enter your Prolific ID")
 
-    q1 = models.StringField(choices=['a', 'b', 'c', 'd'])
-    q2 = models.StringField(choices=['a', 'b', 'c', 'd'])
-    q3 = models.StringField(choices=['a', 'b', 'c', 'd'])
+    q1 = models.StringField(choices=['a', 'b', 'c', 'd'], blank=True)
+    q2 = models.StringField(choices=['a', 'b', 'c', 'd'], blank=True)
+    q3 = models.StringField(choices=['a', 'b', 'c', 'd'], blank=True)
 
     comprehension_attempts = models.IntegerField(initial=0)
     is_excluded = models.BooleanField(initial=False)
@@ -98,14 +98,12 @@ class Introduction(Page):
 # COMPREHENSION TEST
 # --------------------------------------------------
 
-
-
 class ComprehensionTest(Page):
     form_model = 'player'
     form_fields = ['q1', 'q2', 'q3']
 
     def is_displayed(self):
-        return self.round_number == 1 and not self.is_excluded
+        return not self.is_excluded and self.round_number == 1
 
     def vars_for_template(self):
         return {
@@ -113,42 +111,41 @@ class ComprehensionTest(Page):
         }
 
     def error_message(self, values):
-        correct = {
-            "q1": "b",
-            "q2": "c",
-            "q3": "b",
+        correct_answers = {
+            'q1': 'b',
+            'q2': 'c',
+            'q3': 'b',
         }
 
-        # ❌ wrong OR unanswered
-        wrong = [
-            q for q, ans in correct.items()
-            if values.get(q) != ans
+        # ❌ WRONG OR UNANSWERED = INCORRECT
+        incorrect = [
+            q for q, correct in correct_answers.items()
+            if values.get(q) != correct
         ]
 
-        # ✅ passed
-        if not wrong:
-            self.participant.vars.pop("comp_error_message", None)
-            return None
+        if incorrect:
+            self.comprehension_attempts += 1
+            remaining = 3 - self.comprehension_attempts
 
-        # ❌ failed attempt
-        self.comprehension_attempts += 1
-        remaining = 3 - self.comprehension_attempts
+            if remaining <= 0:
+                # ✅ third failure → exclude and advance
+                self.is_excluded = True
+                self.participant.vars.pop("comp_error_message", None)
+                return None
 
-        # ✅ final failure → advance to FailedTest
-        if remaining <= 0:
-            self.is_excluded = True
-            self.participant.vars["failed_comp"] = True
-            self.participant.vars.pop("comp_error_message", None)
-            return None
+            # ✅ manual message for template
+            self.participant.vars["comp_error_message"] = (
+                f"You have failed questions: {', '.join(incorrect)}. "
+                f"You now only have {remaining} attempts left."
+            )
 
-        # ✅ manual message shown in template
-        self.participant.vars["comp_error_message"] = (
-            f"You failed questions {', '.join(wrong)}. "
-            f"You now only have {remaining} more attempts."
-        )
+            # ✅ block page, re-render, no oTree error text
+            return " "
 
-        # ✅ block page, force re-render, hide oTree text via CSS
-        return " "
+        # ✅ all correct → advance
+        self.participant.vars.pop("comp_error_message", None)
+        return None
+
 
 # --------------------------------------------------
 # FAILED TEST
@@ -260,12 +257,12 @@ class Exhausted(Page):
 # PAGE SEQUENCE
 # --------------------------------------------------
 page_sequence = [
-
+    ComprehensionTest,
+    FailedTest,
     InformedConsent,
     AIdetectionpage,
     Introduction,
-    ComprehensionTest,
-    FailedTest,
+
     Results,
     ThankYou,
     #Instructions, #not this one
