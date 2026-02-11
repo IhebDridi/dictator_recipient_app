@@ -403,22 +403,21 @@ def recipient_has_allocations(recipient_prolific_id):
         return cursor.fetchone() is not None
     
 def custom_export(players):
-    """
-    Export one row per completed recipient:
-    Prolific ID + total bonus (ECoins).
-    """
     rows = []
 
+    # ✅ header row (ONLY ONCE)
+    rows.append(['prolific_id', 'bonus_ecoin'])
+
     for p in players:
-        # ✅ only export finished recipients
         if not p.prolific_id:
             continue
         if p.total_allocated is None:
             continue
 
-        rows.append({
-            'prolific_id': p.prolific_id,
-            'bonus_ecoin': p.total_allocated,
-        })
+        # ✅ value row
+        rows.append([
+            p.prolific_id,
+            p.total_allocated,
+        ])
 
     return rows
