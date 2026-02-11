@@ -182,20 +182,15 @@ class Results(Page):
 
     def vars_for_template(self):
 
-        # ✅ GUARANTEED defaults
-        context = {
-            "rows": [],
-            "total_allocated": 0,
-            "total_cents": 0,
-            "total_euros": 0,
-            "remaining_cents": 0,
-        }
+        # ✅ MINIMAL FIX: guard against multiple calls
+        if not self.participant.vars.get("allocations_done", False):
+            assign_dictator_rounds_to_recipient(
+                recipient_prolific_id=self.participant.label,
+                x=100,
+            )
+            self.participant.vars["allocations_done"] = True
 
-        # ✅ Try allocation (may or may not add rows)
-        assign_dictator_rounds_to_recipient(
-            recipient_prolific_id=self.participant.label,
-            x=100,
-        )
+        # ✅ everything below remains unchanged
 
         recipient_key = self.participant.label
 
@@ -228,19 +223,15 @@ class Results(Page):
         total_euros = total_cents // 100
         remaining_cents = total_cents % 100
 
-        # ✅ update context
-        context.update({
+        self.total_allocated = total_allocated
+
+        return {
             "rows": rows,
             "total_allocated": total_allocated,
             "total_cents": total_cents,
             "total_euros": total_euros,
             "remaining_cents": remaining_cents,
-        })
-
-        # ✅ store for export
-        self.total_allocated = total_allocated
-
-        return context
+        }
 
     def before_next_page(self, timeout_happened=False):
         pass
