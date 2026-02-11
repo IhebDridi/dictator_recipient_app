@@ -316,9 +316,9 @@ page_sequence = [
 # ALLOCATION ASSIGNMENT FROM dictator_values (NEW)
 # --------------------------------------------------
 
-def assign_allocations_from_dictator_csv_minimal (
-    recipient_prolific_id,x=100
-    ):
+def assign_allocations_from_dictator_csv_minimal(
+    recipient_prolific_id, x=100
+):
     close_old_connections()
     """
     Assign EXACTLY x rounds to a recipient from dictator_csv_minimal.
@@ -390,38 +390,74 @@ def assign_allocations_from_dictator_csv_minimal (
         rows = cursor.fetchall()
 
         # --------------------------------------------------
-        # 3) Exhaustion check
+        # 3) Insert real allocations
         # --------------------------------------------------
-        if len(rows) < remaining:
-            return False
+        if rows:
+            cursor.executemany(
+                """
+                INSERT INTO recipient_allocations
+                (recipient_prolific_id,
+                 dictator_prolific_id,
+                 round_number,
+                 part,
+                 allocated_value)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                [
+                    (
+                        recipient_prolific_id,
+                        dictator_id,
+                        round_number,
+                        d_part := None,
+                        int(100 - allocation),
+                    )
+                    for dictator_id, round_number, allocation in rows
+                ]
+            )
 
         # --------------------------------------------------
-        # 4) Insert allocations
+        # 4) Fill remaining rounds with zero allocations
         # --------------------------------------------------
-        cursor.executemany(
-            """
-            INSERT INTO recipient_allocations
-            (recipient_prolific_id,
-             dictator_prolific_id,
-             round_number,
-             part,
-             allocated_value)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            [
+        inserted_real = len(rows)
+        missing = remaining - inserted_real
+
+        if missing > 0:
+            # determine next safe round_number
+            cursor.execute(
+                """
+                SELECT COALESCE(MAX(round_number), 0)
+                FROM recipient_allocations
+                WHERE recipient_prolific_id = %s
+                """,
+                [recipient_prolific_id]
+            )
+            max_round = cursor.fetchone()[0]
+
+            zero_rows = [
                 (
                     recipient_prolific_id,
-                    dictator_id,
-                    round_number,
-                    d_part := None,
-                    int(100 - allocation),
+                    None,                  # no dictator
+                    max_round + i + 1,     # continue numbering safely
+                    None,
+                    0                      # allocated_value = 0
                 )
-                for dictator_id, round_number, allocation in rows
+                for i in range(missing)
             ]
-        )
+
+            cursor.executemany(
+                """
+                INSERT INTO recipient_allocations
+                (recipient_prolific_id,
+                 dictator_prolific_id,
+                 round_number,
+                 part,
+                 allocated_value)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                zero_rows
+            )
 
     return True
-
 
 
 
