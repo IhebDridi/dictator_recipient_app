@@ -290,11 +290,11 @@ page_sequence = [
 def assign_dictator_rounds_to_recipient(
     recipient_prolific_id,
     x=100,
-    max_rounds=20,
+    max_loops=20,
 ):
     inserted = 0
 
-    for _ in range(max_rounds):
+    for _ in range(max_loops):
         if inserted >= x:
             break
 
@@ -316,8 +316,15 @@ def assign_dictator_rounds_to_recipient(
                     dsr.dictator_id,
                     dsr.round_number,
                     dsr.allocation
-                FROM dictator_selected_rounds dsr
-                WHERE dsr.allocation IS NOT NULL
+                FROM (
+                    SELECT DISTINCT ON (dictator_id, round_number)
+                        dictator_id,
+                        round_number,
+                        allocation
+                    FROM dictator_selected_rounds
+                    WHERE allocation IS NOT NULL
+                    ORDER BY dictator_id, round_number
+                ) dsr
                 ORDER BY RANDOM()
                 LIMIT %s
                 ON CONFLICT (dictator_prolific_id, round_number) DO NOTHING
