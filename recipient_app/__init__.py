@@ -9,12 +9,10 @@ if not settings.configured:
 
 from otree.api import *
 from django.db import connection
-import math
-
-from django.db import close_old_connections
+from django.db import close_old_connections, IntegrityError
+import random
 
 close_old_connections()
-import random
 
 
 # --------------------------------------------------
@@ -39,15 +37,14 @@ class Group(BaseGroup):
 # Player model (recipient only)
 # --------------------------------------------------
 class Player(BasePlayer):
-    delete_recipient_id = models.StringField(blank=True) # to delete recipient info in deubg mode
-    view_recipient_id = models.StringField(blank=True)  # to view recipient info in deubg mode
+    delete_recipient_id = models.StringField(blank=True)  # to delete recipient info in deubg mode
+    view_recipient_id = models.StringField(blank=True)    # to view recipient info in deubg mode
 
     prolific_id = models.StringField(blank=False, label="Please enter your Prolific ID")
 
     q1 = models.StringField(choices=['a', 'b', 'c', 'd'])
     q2 = models.StringField(choices=['a', 'b', 'c', 'd'])
     q3 = models.StringField(choices=['a', 'b', 'c', 'd'])
-
 
     comprehension_attempts = models.IntegerField(initial=0)
     is_excluded = models.BooleanField(initial=False)
@@ -64,6 +61,11 @@ class InformedConsent(Page):
         pid = self.prolific_id.strip()
         self.participant.label = pid  # display only
 
+        # ✅ AI DETECTION: kick immediately
+        if pid == "GeAI12345678900987654321":
+            self.participant.vars['ai_detected'] = True
+            return
+
         # STEP 1: check if this Prolific ID already has allocations
         already_assigned = recipient_has_allocations(pid)
         self.participant.vars['already_assigned'] = already_assigned
@@ -79,6 +81,9 @@ class InformedConsent(Page):
 # --------------------------------------------------
 class Instructions(Page):
     def is_displayed(self):
+        return self.round_number == 1 and not self.participant.vars.get('ai_detected', False)
+class Introduction(Page):
+    def is_displayed(self):
         return self.round_number == 1
 
 
@@ -88,6 +93,9 @@ class Instructions(Page):
 class ComprehensionTest(Page):
     form_model = 'player'
     form_fields = ['q1', 'q2', 'q3']
+
+    def is_displayed(self):
+        return not self.is_excluded and self.round_number == 1
 
     def vars_for_template(self):
         return {
@@ -101,48 +109,49 @@ class ComprehensionTest(Page):
             "q3": "b",
         }
 
-        wrong = [q for q, ans in correct.items() if values.get(q) != ans]
+        wrong = [
+            q for q, ans in correct.items()
+            if values.get(q) != ans or not values.get(q)
+        ]
 
         if wrong:
             self.comprehension_attempts += 1
             remaining = 3 - self.comprehension_attempts
 
             if remaining <= 0:
+                # ✅ FAIL: mark excluded but DO NOT block page advance
                 self.is_excluded = True
-                return "You have failed the comprehension test too many times."
+                self.participant.vars["failed_comp"] = True
 
-            msg = (
-                f"You failed questions {', '.join(wrong)}. "
-                f"You now only have {remaining} more attempts."
-            )
+                # ✅ clear error so the page advances
+                return None
 
-            # ✅ store for custom placement
-            self.participant.vars["comp_error_message"] = msg
-
-            # ✅ MUST return non‑empty string to block progression
-            return msg
-
+            else:
+                msg = (
+                    f"You failed questions {', '.join(wrong)}. "
+                    f"You now only have {remaining} more attempts."
+                )
+                self.participant.vars["comp_error_message"] = msg
+                return msg
 
 # --------------------------------------------------
 # FAILED TEST
 # --------------------------------------------------
 class FailedTest(Page):
     def is_displayed(self):
-        return self.field_maybe_none('is_excluded')
+        return self.is_excluded
+
+    def app_after_this_page(self, upcoming_apps):
+        return None  # ends the session for this participant
 
 
+# --------------------------------------------------
+# AI DETECTION PAGE
+# --------------------------------------------------
 class AIdetectionpage(Page):
     def is_displayed(self):
-        return self.participant.label == "GeAI12345678900987654321"
+        return self.participant.vars.get('ai_detected', False)
 
-
-# --------------------------------------------------
-# RESULTS
-# --------------------------------------------------
-
-# --------------------------------------------------
-# RESULTS
-# --------------------------------------------------
 
 # --------------------------------------------------
 # RESULTS
@@ -150,10 +159,14 @@ class AIdetectionpage(Page):
 class Results(Page):
 
     def is_displayed(self):
-        return self.round_number == 1 and not self.is_excluded
+        return (
+            self.round_number == 1
+            and not self.is_excluded
+            and not self.participant.vars.get('ai_detected', False)
+        )
 
     def vars_for_template(self):
-        
+
         recipient_key = self.participant.label
 
         #  ASSIGN HERE (not in before_next_page)
@@ -189,6 +202,8 @@ class Results(Page):
         # --------------------------------------------------
         # PAYOFF CALCULATION
         # --------------------------------------------------
+        import math
+
         # 1) Sum over all rows in ECoins
         total_received = sum(r["received"] for r in rows)
 
@@ -205,11 +220,11 @@ class Results(Page):
 
             # raw payoff units
             "total_received": total_received,   # ECoins
-            "total_cents": total_cents,          # cents (integer)
+            "total_cents": total_cents,          # cents
 
             # euro conversion
-            "total_euros": total_euros,          # euros (integer)
-            "remaining_cents": remaining_cents,  # remaining cents (integer)
+            "total_euros": total_euros,
+            "remaining_cents": remaining_cents,
 
             "recipient_prolific_id": recipient_key,
         }
@@ -232,22 +247,26 @@ class Exhausted(Page):
 # PAGE SEQUENCE
 # --------------------------------------------------
 page_sequence = [
+
     InformedConsent,
-    Instructions,
+    AIdetectionpage,
+    Introduction,
     ComprehensionTest,
     FailedTest,
-    Exhausted,
     Results,
-    AIdetectionpage,
     ThankYou,
+    #Instructions, #not this one
+    
+    
+
+    #Exhausted,
+
 ]
 
 
 # --------------------------------------------------
 # ALLOCATION ASSIGNMENT (SAFE)
 # --------------------------------------------------
-from django.db import IntegrityError
-
 def assign_allocations_from_dictator_csv_minimal(
     recipient_prolific_id,
     x=100,
@@ -284,12 +303,12 @@ def assign_allocations_from_dictator_csv_minimal(
                     dsr.allocation
                 FROM dictator_selected_rounds dsr
                 WHERE dsr.allocation IS NOT NULL
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM recipient_allocations ra
-                    WHERE ra.dictator_prolific_id = dsr.dictator_id
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM recipient_allocations ra
+                      WHERE ra.dictator_prolific_id = dsr.dictator_id
                         AND ra.round_number = dsr.round_number
-                )
+                  )
                 ORDER BY RANDOM()
                 LIMIT %s
                 """,
@@ -306,10 +325,10 @@ def assign_allocations_from_dictator_csv_minimal(
                 zero_rows = [
                     (
                         recipient_prolific_id,
-                        'ZERO_FILL',   # NOT NULL safe sentinel
-                        -i - 1,        # fake round numbers (avoid collision)
+                        'ZERO_FILL',
+                        -i - 1,
                         None,
-                        0              # allocated_value = 0
+                        0
                     )
                     for i in range(missing)
                 ]
