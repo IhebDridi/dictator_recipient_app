@@ -281,33 +281,61 @@ page_sequence = [
 def assign_dictator_rounds_to_recipient(
     recipient_prolific_id,
     x=100,
+    max_loops=50,
 ):
-    close_old_connections()
+    inserted = 0
 
+    close_old_connections()
     if connection.connection is None:
         connection.ensure_connection()
 
     with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO recipient_allocations_test (
-                recipient_prolific_id,
-                dictator_prolific_id,
-                round_number,
-                allocated_value
+
+        for _ in range(max_loops):
+            if inserted >= x:
+                break
+
+            remaining = x - inserted
+
+            cursor.execute(
+                """
+                INSERT INTO recipient_allocations_test (
+                    recipient_prolific_id,
+                    dictator_prolific_id,
+                    round_number,
+                    allocated_value
+                )
+                SELECT
+                    %s,
+                    dsr.dictator_id,
+                    dsr.round_number,
+                    dsr.allocation
+                FROM dictator_selected_rounds dsr
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM recipient_allocations_test rat
+                    WHERE rat.dictator_prolific_id = dsr.dictator_id
+                      AND rat.round_number = dsr.round_number
+                )
+                ORDER BY RANDOM()
+                LIMIT %s
+                """,
+                [recipient_prolific_id, remaining]
             )
-            SELECT
-                %s,
-                dictator_id,
-                round_number,
-                allocation
-            FROM dictator_selected_rounds
-            ORDER BY RANDOM()
-            LIMIT %s
-            """,
-            [recipient_prolific_id, x]
+
+            if cursor.rowcount == 0:
+                # pool exhausted
+                break
+
+            inserted += cursor.rowcount
+
+    if inserted < x:
+        raise RuntimeError(
+            f"Only {inserted} dictator rounds available, cannot reach {x}"
         )
-        
+
+    return inserted
+
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
     close_old_connections()
