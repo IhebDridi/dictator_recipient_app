@@ -404,13 +404,21 @@ def recipient_has_allocations(recipient_prolific_id):
     
 def custom_export(players):
     """
-    Export one row per recipient with PID and bonus.
+    Export one row per completed recipient:
+    Prolific ID + total bonus (ECoins).
     """
     rows = []
+
     for p in players:
-        # Only export once per participant (NUM_ROUNDS = 1)
+        # ✅ only export finished recipients
+        if not p.prolific_id:
+            continue
+        if p.total_allocated is None:
+            continue
+
         rows.append({
             'prolific_id': p.prolific_id,
             'bonus_ecoin': p.total_allocated,
         })
+
     return rows
