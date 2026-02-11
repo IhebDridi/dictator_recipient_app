@@ -281,24 +281,33 @@ page_sequence = [
 def assign_dictator_rounds_to_recipient(
     recipient_prolific_id,
     x=100,
-    max_loops=50,
 ):
-    inserted = 0
-
     close_old_connections()
     if connection.connection is None:
         connection.ensure_connection()
 
+    inserted = 0
+
     with connection.cursor() as cursor:
-
-        for _ in range(max_loops):
-            if inserted >= x:
-                break
-
+        while inserted < x:
             remaining = x - inserted
 
             cursor.execute(
                 """
+                WITH picked AS (
+                    SELECT
+                        dictator_id,
+                        round_number,
+                        allocation
+                    FROM dictator_selected_rounds
+                    WHERE (dictator_id, round_number) NOT IN (
+                        SELECT dictator_prolific_id, round_number
+                        FROM recipient_allocations_test
+                    )
+                    ORDER BY RANDOM()
+                    LIMIT %s
+                    FOR UPDATE SKIP LOCKED
+                )
                 INSERT INTO recipient_allocations_test (
                     recipient_prolific_id,
                     dictator_prolific_id,
@@ -307,24 +316,15 @@ def assign_dictator_rounds_to_recipient(
                 )
                 SELECT
                     %s,
-                    dsr.dictator_id,
-                    dsr.round_number,
-                    dsr.allocation
-                FROM dictator_selected_rounds dsr
-                WHERE NOT EXISTS (
-                    SELECT 1
-                    FROM recipient_allocations_test rat
-                    WHERE rat.dictator_prolific_id = dsr.dictator_id
-                      AND rat.round_number = dsr.round_number
-                )
-                ORDER BY RANDOM()
-                LIMIT %s
+                    dictator_id,
+                    round_number,
+                    allocation
+                FROM picked
                 """,
-                [recipient_prolific_id, remaining]
+                [remaining, recipient_prolific_id]
             )
 
             if cursor.rowcount == 0:
-                # pool exhausted
                 break
 
             inserted += cursor.rowcount
@@ -335,7 +335,7 @@ def assign_dictator_rounds_to_recipient(
         )
 
     return inserted
-
+        
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
     close_old_connections()
