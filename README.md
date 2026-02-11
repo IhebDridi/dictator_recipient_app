@@ -216,3 +216,18 @@ This app is intended to:
 ---
 
 Developped under **OTREE==6.0.10**
+
+## data reset
+DELETE FROM recipient_allocations;
+TRUNCATE TABLE recipient_app_player;
+TRUNCATE TABLE otree_participant CASCADE;
+TRUNCATE TABLE otree_session CASCADE;
+Based on these allocations, your total bonus payment is 2942 ECoins = 2 € and 95 cents . 
+Round 	Allocated (to you) 	Kept (by the allocator)
+1 	0 	100
+2 	20 	80
+3 	68 	32
+4 	30 	70
+5 	30 	70
+6 	50 	50
+7 	45 	55
