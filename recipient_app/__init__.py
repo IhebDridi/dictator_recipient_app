@@ -165,6 +165,50 @@ class FailedTest(Page):
 class AIdetectionpage(Page):
     def is_displayed(self):
         return self.participant.vars.get('ai_detected', False)
+    
+# --------------------------------------------------
+# admin page
+# --------------------------------------------------
+class ComputeTotals(Page):
+    """
+    ADMIN-ONLY page.
+    Visit once to compute total_allocated for all players.
+    """
+
+    def is_displayed(self):
+        # ✅ only allow admin / debug
+        return self.session.config.get('compute_totals', False)
+
+    def vars_for_template(self):
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT recipient_prolific_id, SUM(allocated_value)
+                FROM (
+                    SELECT recipient_prolific_id, allocated_value
+                    FROM recipient_allocations
+                    UNION ALL
+                    SELECT recipient_prolific_id, allocated_value
+                    FROM recipient_allocations_new
+                ) t
+                GROUP BY recipient_prolific_id
+                """
+            )
+            totals = dict(cursor.fetchall())
+
+        updated = 0
+        for p in Player.objects.all():
+            pid = p.participant.label
+            if pid in totals:
+                p.total_allocated = int(totals[pid])
+                p.save(update_fields=['total_allocated'])
+                updated += 1
+
+        return {
+            'updated': updated,
+        }
 
 
 # --------------------------------------------------
@@ -257,7 +301,7 @@ class Exhausted(Page):
 # PAGE SEQUENCE
 # --------------------------------------------------
 page_sequence = [
-
+    ComputeTotals,
     InformedConsent,
     AIdetectionpage,
     Introduction,
@@ -399,51 +443,21 @@ def recipient_has_allocations(recipient_prolific_id):
         return cursor.fetchone() is not None
     
 
-from asgiref.sync import async_to_sync, sync_to_async
-from django.db import connection
-
-
-def _export_totals_sync(players):
-    rows = []
-    rows.append(['prolific_id', 'total_allocated'])
-
-    seen = set()
-
-    with connection.cursor() as cursor:
-        for p in players:
-            pid = p.participant.label
-            if not pid or pid in seen:
-                continue
-            seen.add(pid)
-
-            cursor.execute(
-                """
-                SELECT COALESCE(SUM(allocated_value), 0)
-                FROM (
-                    SELECT allocated_value
-                    FROM recipient_allocations
-                    WHERE recipient_prolific_id = %s
-
-                    UNION ALL
-
-                    SELECT allocated_value
-                    FROM recipient_allocations_new
-                    WHERE recipient_prolific_id = %s
-                ) t
-                """,
-                [pid, pid]
-            )
-
-            total_allocated = cursor.fetchone()[0]
-            rows.append([pid, int(total_allocated)])
-
-    return rows
 
 
 def custom_export(players):
-    """
-    oTree-safe export: run sync DB code in a thread.
-    """
-    return async_to_sync(
-        sync_to_async(_export_totals_sync, thread_sensitive=True)
-    )(players)
+    rows = [['prolific_id', 'total_allocated']]
+
+    seen = set()
+    for p in players:
+        pid = p.participant.label
+        if not pid or pid in seen:
+            continue
+        seen.add(pid)
+
+        rows.append([
+            pid,
+            p.total_allocated or 0
+        ])
+
+    return rows
