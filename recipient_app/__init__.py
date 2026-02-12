@@ -397,3 +397,43 @@ def recipient_has_allocations(recipient_prolific_id):
             [recipient_prolific_id]
         )
         return cursor.fetchone() is not None
+    
+
+def custom_export(players):
+    rows = []
+
+    # ✅ header
+    rows.append(['prolific_id', 'total_allocated'])
+
+    # ✅ get unique prolific IDs from participants
+    seen = set()
+
+    for p in players:
+        pid = p.participant.label
+        if not pid or pid in seen:
+            continue
+        seen.add(pid)
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT COALESCE(SUM(allocated_value), 0)
+                FROM (
+                    SELECT allocated_value
+                    FROM recipient_allocations
+                    WHERE recipient_prolific_id = %s
+
+                    UNION ALL
+
+                    SELECT allocated_value
+                    FROM recipient_allocations_new
+                    WHERE recipient_prolific_id = %s
+                ) t
+                """,
+                [pid, pid]
+            )
+            total_allocated = cursor.fetchone()[0]
+
+        rows.append([pid, int(total_allocated)])
+
+    return rows
