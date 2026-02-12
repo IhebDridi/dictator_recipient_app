@@ -340,47 +340,45 @@ def assign_dictator_rounds_too_recipient(
     if connection.connection is None:
         connection.ensure_connection()
 
+    inserted = 0
+
     with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            WITH picked AS (
+        while inserted < x:
+            remaining = x - inserted
+
+            cursor.execute(
+                """
+                INSERT INTO recipient_allocations_new (
+                    recipient_prolific_id,
+                    dictator_id,
+                    dictator_round_number,
+                    allocated_value
+                )
                 SELECT
+                    %s,
                     drc.dictator_id,
                     drc.round_number,
-                    drc.allocation
+                    drc.allocation::integer
                 FROM dictator_remaining_rounds drc
-                WHERE NOT EXISTS (
-                    SELECT 1
-                    FROM recipient_allocations_new ran
-                    WHERE ran.dictator_id = drc.dictator_id
-                      AND ran.dictator_round_number = drc.round_number
-                )
                 ORDER BY RANDOM()
                 LIMIT %s
-                FOR UPDATE SKIP LOCKED
+                ON CONFLICT (dictator_id, dictator_round_number) DO NOTHING
+                """,
+                [recipient_prolific_id, remaining]
             )
-            INSERT INTO recipient_allocations_new (
-                recipient_prolific_id,
-                dictator_id,
-                dictator_round_number,
-                allocated_value
-            )
-            SELECT
-                %s,
-                dictator_id,
-                round_number,
-                allocation::integer
-            FROM picked
-            """,
-            [x, recipient_prolific_id]
+
+            # how many rows were actually inserted
+            inserted_now = cursor.rowcount
+
+            if inserted_now == 0:
+                break
+
+            inserted += inserted_now
+
+    if inserted != x:
+        raise RuntimeError(
+            f"Only {inserted} rounds available, cannot assign {x}"
         )
-
-        if cursor.rowcount != x:
-            raise RuntimeError(
-                f"Only {cursor.rowcount} rounds available, cannot assign {x}"
-            )
-
-
 
 
 
