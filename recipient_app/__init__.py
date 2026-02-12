@@ -359,9 +359,8 @@ def assign_dictator_rounds_too_recipient(
                     %s,
                     drc.dictator_id,
                     drc.round_number,
-                    drc.allocation::integer
-                FROM dictator_remaining_rounds drc
-                WHERE drc.allocation IS NOT NULL
+                    drc.allocation
+                FROM dictator_remaining_rounds_clean drc
                 ORDER BY RANDOM()
                 LIMIT %s
                 ON CONFLICT (dictator_id, dictator_round_number) DO NOTHING
@@ -370,7 +369,6 @@ def assign_dictator_rounds_too_recipient(
             )
 
             inserted_now = cursor.rowcount
-
             if inserted_now == 0:
                 break
 
@@ -380,7 +378,6 @@ def assign_dictator_rounds_too_recipient(
         raise RuntimeError(
             f"Only {inserted} rounds available, cannot assign {x}"
         )
-
 
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
