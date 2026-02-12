@@ -186,7 +186,7 @@ class Results(Page):
         if not self.participant.vars.get("allocations_done", False):
             assign_dictator_rounds_final(
                 recipient_prolific_id=self.participant.label,
-                x=120,
+                x=105,
             )
             self.participant.vars["allocations_done"] = True
 
