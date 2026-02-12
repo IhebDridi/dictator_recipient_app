@@ -399,14 +399,12 @@ def recipient_has_allocations(recipient_prolific_id):
         return cursor.fetchone() is not None
     
 
-from django.utils.asyncio import async_unsafe
+from asgiref.sync import async_to_sync, sync_to_async
+from django.db import connection
 
 
-@async_unsafe
-def custom_export(players):
+def _export_totals_sync(players):
     rows = []
-
-    # header
     rows.append(['prolific_id', 'total_allocated'])
 
     seen = set()
@@ -437,7 +435,15 @@ def custom_export(players):
             )
 
             total_allocated = cursor.fetchone()[0]
-
             rows.append([pid, int(total_allocated)])
 
     return rows
+
+
+def custom_export(players):
+    """
+    oTree-safe export: run sync DB code in a thread.
+    """
+    return async_to_sync(
+        sync_to_async(_export_totals_sync, thread_sensitive=True)
+    )(players)
