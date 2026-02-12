@@ -184,7 +184,7 @@ class Results(Page):
 
         # ✅ MINIMAL FIX: guard against multiple calls
         if not self.participant.vars.get("allocations_done", False):
-            assign_dictator_rounds_to_recipient(
+            assign_dictator_rounds_too_recipient(
                 recipient_prolific_id=self.participant.label,
                 x=100,
             )
@@ -327,6 +327,63 @@ def assign_dictator_rounds_to_recipient(
             raise RuntimeError(
                 f"Only {cursor.rowcount} rounds available, cannot assign {x}"
             )
+
+
+
+
+#this function is used to fix the unseccussfull allocations made by users:
+def assign_dictator_rounds_too_recipient(
+    recipient_prolific_id,
+    x=100,
+):
+    close_old_connections()
+    if connection.connection is None:
+        connection.ensure_connection()
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            WITH picked AS (
+                SELECT
+                    drc.dictator_id,
+                    drc.round_number,
+                    drc.allocation
+                FROM dictator_remaining_rounds drc
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM recipient_allocations_new ran
+                    WHERE ran.dictator_id = drc.dictator_id
+                      AND ran.dictator_round_number = drc.round_number
+                )
+                ORDER BY RANDOM()
+                LIMIT %s
+                FOR UPDATE SKIP LOCKED
+            )
+            INSERT INTO recipient_allocations_new (
+                recipient_prolific_id,
+                dictator_id,
+                dictator_round_number,
+                allocated_value
+            )
+            SELECT
+                %s,
+                dictator_id,
+                round_number,
+                allocation::integer
+            FROM picked
+            """,
+            [x, recipient_prolific_id]
+        )
+
+        if cursor.rowcount != x:
+            raise RuntimeError(
+                f"Only {cursor.rowcount} rounds available, cannot assign {x}"
+            )
+
+
+
+
+
 
 
 def recipient_has_allocations(recipient_prolific_id):
