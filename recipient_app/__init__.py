@@ -399,22 +399,25 @@ def recipient_has_allocations(recipient_prolific_id):
         return cursor.fetchone() is not None
     
 
+from django.utils.asyncio import async_unsafe
+
+
+@async_unsafe
 def custom_export(players):
     rows = []
 
-    # ✅ header
+    # header
     rows.append(['prolific_id', 'total_allocated'])
 
-    # ✅ get unique prolific IDs from participants
     seen = set()
 
-    for p in players:
-        pid = p.participant.label
-        if not pid or pid in seen:
-            continue
-        seen.add(pid)
+    with connection.cursor() as cursor:
+        for p in players:
+            pid = p.participant.label
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
 
-        with connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT COALESCE(SUM(allocated_value), 0)
@@ -432,8 +435,9 @@ def custom_export(players):
                 """,
                 [pid, pid]
             )
+
             total_allocated = cursor.fetchone()[0]
 
-        rows.append([pid, int(total_allocated)])
+            rows.append([pid, int(total_allocated)])
 
     return rows
