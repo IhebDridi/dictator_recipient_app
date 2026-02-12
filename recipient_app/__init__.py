@@ -199,7 +199,7 @@ class ComputeTotals(Page):
             totals = dict(cursor.fetchall())
 
         updated = 0
-        for p in Player.objects.all():
+        for p in self.subsession.get_players():
             pid = p.participant.label
             if pid in totals:
                 p.total_allocated = int(totals[pid])
