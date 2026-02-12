@@ -220,7 +220,6 @@ class Results(Page):
         # ✅ compute totals ONCE and store on Player (export‑safe)
         total_allocated = sum(allocated_value for _, allocated_value in rows_raw)
         self.total_allocated = int(total_allocated)
-        self.save(update_fields=["total_allocated"])
 
         # ✅ convert to payout units
         total_cents = math.ceil(total_allocated / 10)
