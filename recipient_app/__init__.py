@@ -182,25 +182,24 @@ class Results(Page):
 
     def vars_for_template(self):
 
-        # ✅ MINIMAL FIX: guard against multiple calls
+        # ✅ allocate exactly once
         if not self.participant.vars.get("allocations_done", False):
-            assign_dictator_rounds_too_recipient(
+            assign_dictator_rounds_final(
                 recipient_prolific_id=self.participant.label,
                 x=100,
             )
             self.participant.vars["allocations_done"] = True
 
-        # ✅ everything below remains unchanged
-
         recipient_key = self.participant.label
 
+        # ✅ fetch allocations from FINAL table
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT
                     dictator_round_number,
                     allocated_value
-                FROM recipient_allocations_new
+                FROM recipient_allocations_final
                 WHERE recipient_prolific_id = %s
                 ORDER BY dictator_round_number
                 """,
@@ -208,22 +207,25 @@ class Results(Page):
             )
             rows_raw = cursor.fetchall()
 
+        # ✅ use REAL round numbers (no enumerate)
         rows = [
             {
-                "round": i + 1,
+                "round": round_number,
                 "received": allocated_value,
                 "kept": 100 - allocated_value,
             }
-            for i, (round_number, allocated_value) in enumerate(rows_raw)
+            for (round_number, allocated_value) in rows_raw
         ]
 
-        total_allocated = sum(r["received"] for r in rows)
+        # ✅ compute totals ONCE and store on Player (export‑safe)
+        total_allocated = sum(allocated_value for _, allocated_value in rows_raw)
+        self.total_allocated = int(total_allocated)
+        self.save(update_fields=["total_allocated"])
 
+        # ✅ convert to payout units
         total_cents = math.ceil(total_allocated / 10)
         total_euros = total_cents // 100
         remaining_cents = total_cents % 100
-
-        self.total_allocated = total_allocated
 
         return {
             "rows": rows,
@@ -235,7 +237,6 @@ class Results(Page):
 
     def before_next_page(self, timeout_happened=False):
         pass
-
 # --------------------------------------------------
 # THANK YOU
 # --------------------------------------------------
@@ -381,6 +382,58 @@ def assign_dictator_rounds_too_recipient(
                 f"Only {cursor.rowcount} rounds available, cannot assign {x}"
                 
             )
+        
+def assign_dictator_rounds_final(
+    recipient_prolific_id,
+    x=100,
+):
+    close_old_connections()
+    if connection.connection is None:
+        connection.ensure_connection()
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            WITH picked AS (
+                SELECT
+                    drc.dictator_id,
+                    drc.round_number,
+                    drc.allocation
+                FROM dictator_remaining_rounds_clean drc
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM recipient_allocations_final raf
+                    WHERE raf.dictator_id = drc.dictator_id
+                      AND raf.dictator_round_number = drc.round_number
+                )
+                ORDER BY RANDOM()
+                LIMIT %s
+                FOR UPDATE SKIP LOCKED
+            )
+            INSERT INTO recipient_allocations_final (
+                recipient_prolific_id,
+                dictator_id,
+                dictator_round_number,
+                allocated_value
+            )
+            SELECT
+                %s,
+                dictator_id,
+                round_number,
+                allocation
+            FROM picked
+            """,
+            [x, recipient_prolific_id]
+        )
+
+        if cursor.rowcount != x:
+            raise RuntimeError(
+                f"Only {cursor.rowcount} rounds available, cannot assign {x}"
+            )
+
+
+
+
 def recipient_has_allocations(recipient_prolific_id):
     close_old_connections()
     if connection.connection is None:
@@ -399,3 +452,15 @@ def recipient_has_allocations(recipient_prolific_id):
         return cursor.fetchone() is not None
     
 
+def custom_export(players):
+    rows = [["prolific_id", "total_allocated"]]
+    seen = set()
+
+    for p in players:
+        pid = p.participant.label
+        if not pid or pid in seen:
+            continue
+        seen.add(pid)
+        rows.append([pid, p.total_allocated or 0])
+
+    return rows
