@@ -342,18 +342,19 @@ def assign_dictator_rounds_too_recipient(
         connection.ensure_connection()
 
     with connection.cursor() as cursor:
-        # 1️⃣ lock exactly x unused rows
         cursor.execute(
             """
             WITH picked AS (
                 SELECT
-                    dictator_id,
-                    round_number,
-                    allocation
-                FROM dictator_remaining_rounds_clean
-                WHERE (dictator_id, round_number) NOT IN (
-                    SELECT dictator_id, dictator_round_number
-                    FROM recipient_allocations_new
+                    drc.dictator_id,
+                    drc.round_number,
+                    drc.allocation
+                FROM dictator_remaining_rounds_clean drc
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM recipient_allocations_new ran
+                    WHERE ran.dictator_id::integer = drc.dictator_id
+                      AND ran.dictator_round_number = drc.round_number
                 )
                 ORDER BY RANDOM()
                 LIMIT %s
@@ -367,9 +368,9 @@ def assign_dictator_rounds_too_recipient(
             )
             SELECT
                 %s,
-                dictator_id,
-                round_number,
-                allocation
+                picked.dictator_id::text,
+                picked.round_number,
+                picked.allocation
             FROM picked
             """,
             [x, recipient_prolific_id]
