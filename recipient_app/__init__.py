@@ -198,11 +198,11 @@ class Results(Page):
             cursor.execute(
                 """
                 SELECT
-                    round_number,
+                    dictator_round_number,
                     allocated_value
-                FROM recipient_allocations_test
+                FROM recipient_allocations_new
                 WHERE recipient_prolific_id = %s
-                ORDER BY round_number
+                ORDER BY dictator_round_number
                 """,
                 [recipient_key]
             )
@@ -277,7 +277,6 @@ page_sequence = [
 # --------------------------------------------------
 # ALLOCATION ASSIGNMENT (SAFE)
 # --------------------------------------------------
-
 def assign_dictator_rounds_to_recipient(
     recipient_prolific_id,
     x=100,
@@ -331,6 +330,7 @@ def assign_dictator_rounds_to_recipient(
 
 
 
+
 #this function is used to fix the unseccussfull allocations made by users:
 
 def assign_dictator_rounds_too_recipient(
@@ -379,13 +379,10 @@ def assign_dictator_rounds_too_recipient(
         if cursor.rowcount != x:
             raise RuntimeError(
                 f"Only {cursor.rowcount} rounds available, cannot assign {x}"
+                
             )
-
 def recipient_has_allocations(recipient_prolific_id):
-    #  absolutely required
     close_old_connections()
-
-    #  defensive: force reconnect if needed
     if connection.connection is None:
         connection.ensure_connection()
 
@@ -393,30 +390,10 @@ def recipient_has_allocations(recipient_prolific_id):
         cursor.execute(
             """
             SELECT 1
-            FROM recipient_allocations_test
+            FROM recipient_allocations_new
             WHERE recipient_prolific_id = %s
             LIMIT 1
             """,
             [recipient_prolific_id]
         )
         return cursor.fetchone() is not None
-    
-def custom_export(players):
-    rows = []
-
-    # ✅ header row (ONLY ONCE)
-    rows.append(['prolific_id', 'bonus_ecoin'])
-
-    for p in players:
-        if not p.prolific_id:
-            continue
-        if p.total_allocated is None:
-            continue
-
-        # ✅ value row
-        rows.append([
-            p.prolific_id,
-            p.total_allocated,
-        ])
-
-    return rows
