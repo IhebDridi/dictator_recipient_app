@@ -341,43 +341,44 @@ def assign_dictator_rounds_too_recipient(
     if connection.connection is None:
         connection.ensure_connection()
 
-    inserted = 0
-
     with connection.cursor() as cursor:
-        while inserted < x:
-            remaining = x - inserted
-
-            cursor.execute(
-                """
-                INSERT INTO recipient_allocations_new (
-                    recipient_prolific_id,
-                    dictator_id,
-                    dictator_round_number,
-                    allocated_value
-                )
+        # 1️⃣ lock exactly x unused rows
+        cursor.execute(
+            """
+            WITH picked AS (
                 SELECT
-                    %s,
-                    drc.dictator_id,
-                    drc.round_number,
-                    drc.allocation
-                FROM dictator_remaining_rounds_clean drc
+                    dictator_id,
+                    round_number,
+                    allocation
+                FROM dictator_remaining_rounds_clean
+                WHERE (dictator_id, round_number) NOT IN (
+                    SELECT dictator_id, dictator_round_number
+                    FROM recipient_allocations_new
+                )
                 ORDER BY RANDOM()
                 LIMIT %s
-                ON CONFLICT (dictator_id, dictator_round_number) DO NOTHING
-                """,
-                [recipient_prolific_id, remaining]
+                FOR UPDATE SKIP LOCKED
             )
-
-            inserted_now = cursor.rowcount
-            if inserted_now == 0:
-                break
-
-            inserted += inserted_now
-
-    if inserted != x:
-        raise RuntimeError(
-            f"Only {inserted} rounds available, cannot assign {x}"
+            INSERT INTO recipient_allocations_new (
+                recipient_prolific_id,
+                dictator_id,
+                dictator_round_number,
+                allocated_value
+            )
+            SELECT
+                %s,
+                dictator_id,
+                round_number,
+                allocation
+            FROM picked
+            """,
+            [x, recipient_prolific_id]
         )
+
+        if cursor.rowcount != x:
+            raise RuntimeError(
+                f"Only {cursor.rowcount} rounds available, cannot assign {x}"
+            )
 
 def recipient_has_allocations(recipient_prolific_id):
     #  absolutely required
