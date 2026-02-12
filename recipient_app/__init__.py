@@ -165,50 +165,6 @@ class FailedTest(Page):
 class AIdetectionpage(Page):
     def is_displayed(self):
         return self.participant.vars.get('ai_detected', False)
-    
-# --------------------------------------------------
-# admin page
-# --------------------------------------------------
-class ComputeTotals(Page):
-    """
-    ADMIN-ONLY page.
-    Visit once to compute total_allocated for all players.
-    """
-
-    def is_displayed(self):
-        # ✅ only allow admin / debug
-        return self.session.config.get('compute_totals', False)
-
-    def vars_for_template(self):
-        from django.db import connection
-
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT recipient_prolific_id, SUM(allocated_value)
-                FROM (
-                    SELECT recipient_prolific_id, allocated_value
-                    FROM recipient_allocations
-                    UNION ALL
-                    SELECT recipient_prolific_id, allocated_value
-                    FROM recipient_allocations_new
-                ) t
-                GROUP BY recipient_prolific_id
-                """
-            )
-            totals = dict(cursor.fetchall())
-
-        updated = 0
-        for p in self.subsession.get_players():
-            pid = p.participant.label
-            if pid in totals:
-                p.total_allocated = int(totals[pid])
-                p.save(update_fields=['total_allocated'])
-                updated += 1
-
-        return {
-            'updated': updated,
-        }
 
 
 # --------------------------------------------------
@@ -301,7 +257,7 @@ class Exhausted(Page):
 # PAGE SEQUENCE
 # --------------------------------------------------
 page_sequence = [
-    ComputeTotals,
+
     InformedConsent,
     AIdetectionpage,
     Introduction,
@@ -443,21 +399,3 @@ def recipient_has_allocations(recipient_prolific_id):
         return cursor.fetchone() is not None
     
 
-
-
-def custom_export(players):
-    rows = [['prolific_id', 'total_allocated']]
-
-    seen = set()
-    for p in players:
-        pid = p.participant.label
-        if not pid or pid in seen:
-            continue
-        seen.add(pid)
-
-        rows.append([
-            pid,
-            p.total_allocated or 0
-        ])
-
-    return rows

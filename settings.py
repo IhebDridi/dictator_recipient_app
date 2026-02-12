@@ -33,7 +33,6 @@ SESSION_CONFIGS = [
         display_name='Recipients',
         num_demo_participants=200,
         app_sequence=['recipient_app'],
-        compute_totals=True
     ),
     # dict(
     #     name='public_goods',
