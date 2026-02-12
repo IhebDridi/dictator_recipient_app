@@ -332,6 +332,7 @@ def assign_dictator_rounds_to_recipient(
 
 
 #this function is used to fix the unseccussfull allocations made by users:
+
 def assign_dictator_rounds_too_recipient(
     recipient_prolific_id,
     x=100,
@@ -360,6 +361,7 @@ def assign_dictator_rounds_too_recipient(
                     drc.round_number,
                     drc.allocation::integer
                 FROM dictator_remaining_rounds drc
+                WHERE drc.allocation IS NOT NULL
                 ORDER BY RANDOM()
                 LIMIT %s
                 ON CONFLICT (dictator_id, dictator_round_number) DO NOTHING
@@ -367,7 +369,6 @@ def assign_dictator_rounds_too_recipient(
                 [recipient_prolific_id, remaining]
             )
 
-            # how many rows were actually inserted
             inserted_now = cursor.rowcount
 
             if inserted_now == 0:
@@ -379,9 +380,6 @@ def assign_dictator_rounds_too_recipient(
         raise RuntimeError(
             f"Only {inserted} rounds available, cannot assign {x}"
         )
-
-
-
 
 
 def recipient_has_allocations(recipient_prolific_id):
